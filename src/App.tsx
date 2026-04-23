@@ -9,6 +9,7 @@ import CV from './components/CV';
 import Gallery from './components/Gallery';
 import Contact from './components/Contact';
 import AdminDashboard from './components/AdminDashboard';
+import DebugInfo from './components/DebugInfo';
 import { useState, useEffect } from 'react';
 
 export default function App() {
@@ -67,7 +68,7 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen bg-dark font-sans overflow-x-hidden transition-all duration-500 ${isProtected ? 'blur-2xl grayscale' : ''}`}>
+    <div className={`min-h-screen w-full bg-dark font-sans overflow-x-hidden transition-all duration-500 ${isProtected ? 'blur-2xl grayscale' : ''}`} style={{ backgroundColor: '#060709' }}>
       <Navbar onAdminOpen={() => setIsAdminOpen(true)} />
       <main>
         <Hero />
@@ -77,6 +78,9 @@ export default function App() {
       </main>
 
       {isAdminOpen && <AdminDashboard onClose={handleCloseAdmin} />}
+      
+      {/* Debug Info */}
+      <DebugInfo />
       
       {/* Privacy Notice Overlay (Experimental deterrent) */}
       {isProtected && (
