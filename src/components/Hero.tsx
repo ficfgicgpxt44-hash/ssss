@@ -62,7 +62,7 @@ export default function Hero() {
           <div className="relative aspect-[4/5] rounded-[3.5rem] overflow-hidden bg-card border-4 border-surface shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] glow-gold group">
             <div className="w-full h-full overflow-hidden">
                <img 
-                src="/sami_profile.png" 
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/sami_profile-RZF3jpGVRfzflhuZb8sdqBAM5e5yeG.png" 
                 alt="Sami Ali" 
                 className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110"
                 onError={(e) => {
