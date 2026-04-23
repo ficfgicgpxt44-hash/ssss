@@ -62,14 +62,13 @@ export const CaseService = {
     try {
       const { error } = await supabase
         .from('cases')
-        .update(updatedCase)
-        .eq('id', updatedCase.id);
+        .upsert(updatedCase);
 
       if (error) throw error;
       return true;
     } catch (e) {
-      console.error("Failed to update case in Supabase", e);
-      alert("Failed to update case.");
+      console.error("Failed to upsert case in Supabase", e);
+      alert("Failed to save or update case.");
       return false;
     }
   },
@@ -86,6 +85,23 @@ export const CaseService = {
       if (error) throw error;
     } catch (e) {
       console.error("Failed to delete case from Supabase", e);
+      throw e;
+    }
+  },
+
+  clearAllCases: async (): Promise<void> => {
+    if (!isSupabaseConfigured()) return;
+
+    try {
+      // Small trick: delete all where ID is not null (or any other always-true condition)
+      const { error } = await supabase
+        .from('cases')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Deletes everything
+
+      if (error) throw error;
+    } catch (e) {
+      console.error("Failed to clear cases from Supabase", e);
       throw e;
     }
   }

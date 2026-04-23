@@ -338,10 +338,13 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
           <div className="flex gap-4">
             <button 
               onClick={async () => {
-                if(confirm('All data will be erased, are you sure?')) {
-                  const db = await openDB('dentist_portfolio', 1);
-                  await db.clear('cases');
-                  setCases([]);
+                if(confirm('All data will be erased from database, are you sure?')) {
+                  try {
+                    await CaseService.clearAllCases();
+                    setCases([]);
+                  } catch (err) {
+                    alert('Failed to clear database');
+                  }
                 }
               }}
               className="px-6 py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl font-bold hover:bg-red-500 hover:text-white transition-all text-xs"
