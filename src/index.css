@@ -30,6 +30,11 @@ input, textarea, [contenteditable="true"] {
   -webkit-user-select: text;
 }
 
+input, textarea, [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 img {
   pointer-events: none;
   -webkit-user-drag: none;

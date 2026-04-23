@@ -1,5 +1,6 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { Case } from '../types';
+import { initialCases } from '../data/initialData';
 
 const DB_NAME = 'dentist_portfolio';
 const STORE_NAME = 'cases';
@@ -19,32 +20,6 @@ const getDB = () => {
   }
   return dbPromise;
 };
-
-// Default initial data
-const initialCases: Case[] = [
-  {
-    id: '1',
-    createdAt: 1713830400000, // Fixed old date
-    title: 'Smile Enhancement (Veneers)',
-    category: 'Prosthodontics',
-    description: 'Elevating the smile aesthetics by changing teeth color and shape naturally to harmonize with facial features.',
-    images: [
-      'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?q=80&w=600&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=600&auto=format&fit=crop'
-    ],
-  },
-  {
-    id: '2',
-    createdAt: 1713834000000, // Fixed old date
-    title: 'Anterior Fracture Restoration',
-    category: 'Prosthodontics',
-    description: 'Using aesthetic composite fillings to repair fractured upper central incisors while maintaining pulp vitality.',
-    images: [
-      'https://images.unsplash.com/photo-1598256989800-fe5f95da9787?q=80&w=600&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?q=80&w=600&auto=format&fit=crop'
-    ],
-  },
-];
 
 export const CaseService = {
   getCases: async (): Promise<Case[]> => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download } from 'lucide-react';
 import { openDB } from 'idb';
 import heic2any from 'heic2any';
 import { Case } from '../types';
@@ -15,6 +15,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   
   const [cases, setCases] = useState<Case[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
   const [editingCase, setEditingCase] = useState<Case | null>(null);
   const [formData, setFormData] = useState<Omit<Case, 'id' | 'createdAt'>>({
     title: '',
@@ -89,11 +91,11 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   // Dashboard content follows
 
-  const compressImage = (base64Str: string, maxWidth = 1200, maxHeight = 1200): Promise<string> => {
+  const compressImage = (base64Str: string, maxWidth = 720, maxHeight = 720): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onerror = () => {
-        console.warn("Compression: Failed to load image, falling back to original");
+        console.warn("Compression: Failed to load image");
         resolve(base64Str);
       };
       img.onload = () => {
@@ -122,7 +124,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             return;
           }
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.8));
+          // Very aggressive compression: 0.4 quality for clinical photos is usually enough for web review
+          resolve(canvas.toDataURL('image/jpeg', 0.4));
         } catch (err) {
           console.error("Compression error:", err);
           resolve(base64Str);
@@ -130,6 +133,48 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       };
       img.src = base64Str;
     });
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setIsImporting(true);
+    setImportProgress(0);
+    
+    try {
+      let totalImported = 0;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const text = await file.text();
+        let importedData = JSON.parse(text);
+        
+        // Handle both single case or array of cases
+        const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
+        
+        for (const c of casesToImport) {
+          await CaseService.updateCase({ 
+            ...c, 
+            id: c.id || Date.now().toString() + Math.random(),
+            createdAt: c.createdAt || Date.now()
+          });
+          totalImported++;
+        }
+        
+        setImportProgress(Math.round(((i + 1) / files.length) * 100));
+      }
+      
+      const freshData = await CaseService.getCases();
+      setCases(freshData);
+      alert(`Successfully imported ${totalImported} cases.`);
+    } catch (err) {
+      console.error("Import error:", err);
+      alert("Failed to import JSON. Please ensure the file format is correct.");
+    } finally {
+      setIsImporting(false);
+      setImportProgress(0);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -205,6 +250,58 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             </button>
             
             <button 
+              onClick={async () => {
+                const data = await CaseService.getCases();
+                if (data.length === 0) {
+                  alert("No cases to export");
+                  return;
+                }
+                
+                if (!confirm(`This will trigger ${data.length} separate downloads. Continue?`)) return;
+
+                // Download each case separately with a small delay to prevent browser blocking
+                for (let i = 0; i < data.length; i++) {
+                  const c = data[i];
+                  const fileName = `case_${c.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${c.id}.json`;
+                  const blob = new Blob([JSON.stringify(c)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = fileName;
+                  
+                  // Small timeout to help browser handle multiple downloads
+                  setTimeout(() => {
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }, i * 400); 
+                }
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 rounded-xl font-bold transition-all border border-white/5"
+            >
+              <Download className="w-5 h-5 text-gold" />
+              Export All Separate
+            </button>
+
+            <div className="relative">
+              <input 
+                type="file" 
+                accept=".json"
+                multiple
+                className="hidden" 
+                id="json-import-bulk"
+                onChange={handleImport}
+                disabled={isImporting}
+              />
+              <label 
+                htmlFor="json-import-bulk"
+                className={`w-full flex items-center gap-3 px-4 py-3 bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white rounded-xl font-bold transition-all border border-blue-500/20 cursor-pointer text-center ${isImporting ? 'opacity-50 pointer-events-none' : ''}`}
+              >
+                <ChevronRight className={`w-5 h-5 ${isImporting ? 'animate-spin' : ''}`} />
+                {isImporting ? `Importing ${importProgress}%` : 'Import JSON Files'}
+              </label>
+            </div>
+
+            <button 
               onClick={() => {
                 const newPass = prompt('Enter new password:');
                 if (newPass) {
@@ -214,7 +311,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
               }}
               className="w-full flex items-center gap-3 px-4 py-3 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 rounded-xl font-bold transition-all border border-white/5"
             >
-              <Save className="w-5 h-5" />
+              <Edit3 className="w-5 h-5" />
               Change Password
             </button>
           </nav>
@@ -287,6 +384,22 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
                 </div>
 
                 <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      const fileName = `case_${c.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${c.id}.json`;
+                      const blob = new Blob([JSON.stringify(c)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = fileName;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    title="Export this case"
+                    className="p-3 bg-white/5 hover:bg-blue-500 hover:text-white rounded-xl transition-all border border-white/10 text-white"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
                   <button 
                     onClick={() => startEdit(c)}
                     className="p-3 bg-white/5 hover:bg-gold hover:text-dark rounded-xl transition-all border border-white/10 text-white"

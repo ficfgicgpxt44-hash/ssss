@@ -36,9 +36,9 @@ export default function App() {
       }
     };
 
-    // 3. Screen capture deterrent (Blur when tab is switched)
+    // 3. Screen capture deterrent (Disabled for now to avoid usability issues during dev)
     const handleVisibility = () => {
-      setIsProtected(document.visibilityState === 'hidden' || !document.hasFocus());
+      // setIsProtected(document.visibilityState === 'hidden' || !document.hasFocus());
     };
 
     // 3. Prevent Dragging anything
@@ -48,16 +48,16 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('dragstart', handleDragStart);
     window.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('blur', () => setIsProtected(true));
-    window.addEventListener('focus', () => setIsProtected(false));
+    // window.addEventListener('blur', () => setIsProtected(true));
+    // window.addEventListener('focus', () => setIsProtected(false));
 
     return () => {
       window.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('dragstart', handleDragStart);
       window.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('blur', () => setIsProtected(true));
-      window.removeEventListener('focus', () => setIsProtected(false));
+      // window.removeEventListener('blur', () => setIsProtected(true));
+      // window.removeEventListener('focus', () => setIsProtected(false));
     };
   }, []);
 
