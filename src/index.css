@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;600;700;800&family=Playfair+Display:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Alexandria", system-ui, sans-serif;
+  --font-serif: "Playfair Display", serif;
+  
+  --color-gold: #C5A059;
+  --color-dark: #060709;
+  --color-surface: #0A0C10;
+  --color-card: #111419;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: var(--color-dark);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  color: #E0E0E0;
+  font-feature-settings: "ss01", "ss02", "cv01", "cv02";
+  overflow-x: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input, textarea, [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+img {
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+::selection {
+  background: transparent;
+  color: inherit;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold);
+}
+
+/* Glow Effects */
+.glow-gold {
+  box-shadow: 0 0 40px -10px rgba(197, 160, 89, 0.3);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #fff 0%, #C5A059 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
