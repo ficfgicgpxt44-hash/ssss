@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download } from 'lucide-react';
-import { openDB } from 'idb';
 import heic2any from 'heic2any';
 import { Case } from '../types';
 import { CaseService } from '../services/CaseService';
@@ -24,6 +23,9 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     description: '',
     images: []
   });
+
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizationProgress, setOptimizationProgress] = useState(0);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,7 +147,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     try {
       let totalImported = 0;
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+        const file = files[i] as File;
         const text = await file.text();
         let importedData = JSON.parse(text);
         

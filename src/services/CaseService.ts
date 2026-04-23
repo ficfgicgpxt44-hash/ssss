@@ -1,93 +1,93 @@
-import { openDB, IDBPDatabase } from 'idb';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Case } from '../types';
 import { initialCases } from '../data/initialData';
 
-const DB_NAME = 'dentist_portfolio';
-const STORE_NAME = 'cases';
-const DB_VERSION = 1;
-
-let dbPromise: Promise<IDBPDatabase<any>> | null = null;
-
-const getDB = () => {
-  if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        }
-      },
-    });
-  }
-  return dbPromise;
-};
-
 export const CaseService = {
   getCases: async (): Promise<Case[]> => {
-    try {
-      const db = await getDB();
-      const cases = await db.getAll(STORE_NAME);
-      
-      // Only initialize if data has NEVER been set (checking a special flag in localStorage)
-      const isInitialized = localStorage.getItem('db_initialized');
-      
-      if (cases.length === 0 && !isInitialized) {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        for (const c of initialCases) {
-          await tx.store.put(c);
-        }
-        await tx.done;
-        localStorage.setItem('db_initialized', 'true');
-        return initialCases.sort((a, b) => b.createdAt - a.createdAt);
-      }
-      
-      return cases.sort((a, b) => b.createdAt - a.createdAt);
-    } catch (e) {
-      console.error("Failed to load cases from IndexedDB", e);
+    if (!isSupabaseConfigured()) {
+      console.warn("Supabase is not configured. Falling back to initial data.");
       return initialCases.sort((a, b) => b.createdAt - a.createdAt);
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('cases')
+        .select('*')
+        .order('createdAt', { ascending: false });
+
+      if (error) throw error;
+      
+      if (!data || data.length === 0) {
+        // If the table is empty and we haven't initialized, we could seed it
+        // But in a shared DB, we probably don't want everyone seeding automatically.
+        return [];
+      }
+
+      return data as Case[];
+    } catch (e) {
+      console.error("Failed to load cases from Supabase", e);
+      return [];
     }
   },
 
   addCase: async (newCase: Omit<Case, 'id' | 'createdAt'>): Promise<Case | null> => {
+    if (!isSupabaseConfigured()) {
+      alert("Please configure SUPABASE_URL and SUPABASE_ANON_KEY in your environment.");
+      return null;
+    }
+
     try {
-      const db = await getDB();
-      const id = Date.now().toString();
+      const id = crypto.randomUUID();
       const createdAt = Date.now();
-      const caseWithId = { ...newCase, id, createdAt } as Case;
-      await db.put(STORE_NAME, caseWithId);
-      return caseWithId;
+      const caseWithId = { ...newCase, id, createdAt };
+      
+      const { data, error } = await supabase
+        .from('cases')
+        .insert([caseWithId])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as Case;
     } catch (e) {
-      console.error("Failed to save case to IndexedDB", e);
-      alert("Sorry, failed to save case. Please check your device storage.");
+      console.error("Failed to save case to Supabase", e);
+      alert("Failed to save case. Please check your Supabase configuration and permissions.");
       return null;
     }
   },
 
   updateCase: async (updatedCase: Case): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
+
     try {
-      const db = await getDB();
-      await db.put(STORE_NAME, updatedCase);
+      const { error } = await supabase
+        .from('cases')
+        .update(updatedCase)
+        .eq('id', updatedCase.id);
+
+      if (error) throw error;
       return true;
     } catch (e) {
-      console.error("Failed to update case in IndexedDB", e);
-      alert("Sorry, failed to update case.");
+      console.error("Failed to update case in Supabase", e);
+      alert("Failed to update case.");
       return false;
     }
   },
 
   deleteCase: async (id: string): Promise<void> => {
+    if (!isSupabaseConfigured()) return;
+
     try {
-      const db = await getDB();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      await tx.store.delete(id);
-      await tx.done;
-      
-      // Ensure the initialization flag is set even after a manual delete
-      if (!localStorage.getItem('db_initialized')) {
-        localStorage.setItem('db_initialized', 'true');
-      }
+      const { error } = await supabase
+        .from('cases')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
     } catch (e) {
-      console.error("Failed to delete case from IndexedDB", e);
+      console.error("Failed to delete case from Supabase", e);
       throw e;
     }
   }
 };
+
