@@ -139,7 +139,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []) as File[];
     if (files.length === 0) return;
 
     setIsImporting(true);
