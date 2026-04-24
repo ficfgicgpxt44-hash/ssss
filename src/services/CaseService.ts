@@ -32,7 +32,7 @@ export const CaseService = {
 
   addCase: async (newCase: Omit<Case, 'id' | 'createdAt'>): Promise<Case | null> => {
     if (!isSupabaseConfigured()) {
-      alert("Please configure SUPABASE_URL and SUPABASE_ANON_KEY in your environment.");
+      console.error("[v0] Supabase is not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY");
       return null;
     }
 
@@ -41,17 +41,27 @@ export const CaseService = {
       const createdAt = Date.now();
       const caseWithId = { ...newCase, id, createdAt };
       
+      console.log("[v0] Attempting to insert case:", caseWithId);
+      
       const { data, error } = await supabase
         .from('cases')
         .insert([caseWithId])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("[v0] Supabase insert error:", error);
+        console.error("[v0] Error code:", error.code);
+        console.error("[v0] Error details:", error.details);
+        console.error("[v0] Error message:", error.message);
+        throw error;
+      }
+      
+      console.log("[v0] Case added successfully:", id);
       return data as Case;
     } catch (e) {
-      console.error("Failed to save case to Supabase", e);
-      alert("Failed to save case. Please check your Supabase configuration and permissions.");
+      console.error("[v0] Failed to save case to Supabase:", e);
+      // Return null silently instead of alerting - the caller can handle errors
       return null;
     }
   },

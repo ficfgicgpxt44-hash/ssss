@@ -4,6 +4,7 @@ import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Do
 import heic2any from 'heic2any';
 import { Case } from '../types';
 import { CaseService } from '../services/CaseService';
+import { DatabaseStatus } from './DatabaseStatus';
 
 const categories = ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "Cosmetic Fillings"];
 
@@ -146,32 +147,69 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     
     try {
       let totalImported = 0;
+      let totalFiles = 0;
+      
       for (let i = 0; i < files.length; i++) {
         const file = files[i] as File;
-        const text = await file.text();
-        let importedData = JSON.parse(text);
         
-        // Handle both single case or array of cases
-        const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
-        
-        for (const c of casesToImport) {
-          await CaseService.updateCase({ 
-            ...c, 
-            id: c.id || Date.now().toString() + Math.random(),
-            createdAt: c.createdAt || Date.now()
-          });
-          totalImported++;
+        try {
+          const text = await file.text();
+          let importedData = JSON.parse(text);
+          
+          // Handle both single case or array of cases
+          const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
+          
+          for (const c of casesToImport) {
+            // Ensure required fields exist
+            const caseToSave: Case = {
+              id: c.id || crypto.randomUUID(),
+              title: c.title || 'Untitled Case',
+              category: c.category || 'Prosthodontics',
+              description: c.description || '',
+              images: Array.isArray(c.images) ? c.images : [],
+              createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now()
+            };
+            
+            console.log("[v0] Attempting to import case:", caseToSave.title);
+            
+            const result = await CaseService.addCase({
+              title: caseToSave.title,
+              category: caseToSave.category,
+              description: caseToSave.description,
+              images: caseToSave.images
+            });
+            
+            if (result) {
+              console.log("[v0] Case imported successfully:", result.id);
+              totalImported++;
+            } else {
+              console.error("[v0] Failed to import case:", caseToSave.title);
+            }
+          }
+          totalFiles++;
+        } catch (fileError) {
+          console.error(`Error processing file ${file.name}:`, fileError);
+          alert(`Failed to process file "${file.name}". Please ensure it's valid JSON.`);
         }
         
         setImportProgress(Math.round(((i + 1) / files.length) * 100));
       }
       
-      const freshData = await CaseService.getCases();
-      setCases(freshData);
-      alert(`Successfully imported ${totalImported} cases.`);
+      if (totalImported > 0) {
+        const freshData = await CaseService.getCases();
+        setCases(freshData);
+        alert(`Successfully imported ${totalImported} cases from ${totalFiles} file(s).`);
+      } else {
+        alert(
+          'No cases were imported. Possible issues:\n' +
+          '1. Supabase database table "cases" not created. Please run the setup SQL script.\n' +
+          '2. Check browser console for detailed error messages.\n' +
+          '3. Verify your Supabase VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set correctly.'
+        );
+      }
     } catch (err) {
       console.error("Import error:", err);
-      alert("Failed to import JSON. Please ensure the file format is correct.");
+      alert("Failed to import JSON. Please ensure the file format is correct and Supabase is configured.");
     } finally {
       setIsImporting(false);
       setImportProgress(0);
@@ -361,6 +399,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         </header>
 
         <div className="grid grid-cols-1 gap-6">
+          <DatabaseStatus />
           <AnimatePresence mode="popLayout">
             {cases.map((c) => (
               <motion.div 
