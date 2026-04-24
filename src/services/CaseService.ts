@@ -46,6 +46,28 @@ export const CaseService = {
     }
   },
 
+  syncAllToSupabase: async (): Promise<{ success: boolean; count: number; error?: any }> => {
+    try {
+      const db = await getDB();
+      const localCases = await db.getAll(STORE_NAME);
+
+      if (localCases.length === 0) {
+        return { success: true, count: 0 };
+      }
+
+      console.log(`Syncing ${localCases.length} cases to Supabase...`);
+      const { error } = await supabase.from('cases').upsert(localCases);
+      
+      if (error) throw error;
+      
+      localStorage.setItem('supabase_migrated', 'true');
+      return { success: true, count: localCases.length };
+    } catch (e) {
+      console.error("Sync to Supabase failed", e);
+      return { success: false, count: 0, error: e };
+    }
+  },
+
   getCases: async (): Promise<Case[]> => {
     try {
       // Try fetching from Supabase first
@@ -117,7 +139,7 @@ export const CaseService = {
     try {
       const { error } = await supabase
         .from('cases')
-        .update(updatedCase)
+        .upsert(updatedCase)
         .eq('id', updatedCase.id);
 
       if (error) throw error;
@@ -127,6 +149,30 @@ export const CaseService = {
       return true;
     } catch (e) {
       console.error("Failed to update case in Supabase", e);
+      return false;
+    }
+  },
+
+  importCases: async (cases: Case[]): Promise<boolean> => {
+    try {
+      if (cases.length === 0) return true;
+      
+      const { error } = await supabase
+        .from('cases')
+        .upsert(cases);
+
+      if (error) throw error;
+
+      const db = await getDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      for (const c of cases) {
+        await tx.store.put(c);
+      }
+      await tx.done;
+      
+      return true;
+    } catch (e) {
+      console.error("Failed to import cases to Supabase", e);
       return false;
     }
   },

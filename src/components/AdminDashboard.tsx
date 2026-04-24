@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download, RefreshCw, Cloud } from 'lucide-react';
 import { openDB } from 'idb';
 import heic2any from 'heic2any';
 import { Case } from '../types';
@@ -16,6 +16,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [cases, setCases] = useState<Case[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [editingCase, setEditingCase] = useState<Case | null>(null);
   const [formData, setFormData] = useState<Omit<Case, 'id' | 'createdAt'>>({
@@ -94,6 +95,26 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   // Dashboard content follows
 
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await CaseService.syncAllToSupabase();
+      if (result.success) {
+        alert(`Successfully synced ${result.count} cases to cloud.`);
+        const freshData = await CaseService.getCases();
+        setCases(freshData);
+      } else {
+        console.error("Sync error details:", result.error);
+        alert(`Sync failed: ${result.error?.message || 'Unknown error'}. Make sure your Supabase table 'cases' exists.`);
+      }
+    } catch (err) {
+      console.error("Sync error:", err);
+      alert("Failed to sync cases.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const compressImage = (base64Str: string, maxWidth = 720, maxHeight = 720): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
@@ -152,16 +173,17 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         const text = await file.text();
         let importedData = JSON.parse(text);
         
-        // Handle both single case or array of cases
-        const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
+        const casesToImport: Case[] = (Array.isArray(importedData) ? importedData : [importedData]).map(c => ({
+          ...c,
+          id: c.id || crypto.randomUUID(),
+          createdAt: c.createdAt || Date.now()
+        }));
         
-        for (const c of casesToImport) {
-          await CaseService.updateCase({ 
-            ...c, 
-            id: c.id || Date.now().toString() + Math.random(),
-            createdAt: c.createdAt || Date.now()
-          });
-          totalImported++;
+        const success = await CaseService.importCases(casesToImport);
+        if (success) {
+          totalImported += casesToImport.length;
+        } else {
+          throw new Error("Failed to save some cases to cloud");
         }
         
         setImportProgress(Math.round(((i + 1) / files.length) * 100));
@@ -250,6 +272,15 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             >
               <Plus className="w-5 h-5" />
               Add Case
+            </button>
+            
+            <button 
+              onClick={handleSync}
+              disabled={isSyncing}
+              className={`w-full flex items-center gap-3 px-4 py-3 bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white rounded-xl font-bold transition-all border border-green-500/20 ${isSyncing ? 'opacity-50' : ''}`}
+            >
+              <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Syncing...' : 'Sync All to Cloud'}
             </button>
             
             <button 
