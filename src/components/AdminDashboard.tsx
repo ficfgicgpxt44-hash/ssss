@@ -42,8 +42,15 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (isAuthenticated) {
       const fetchCases = async () => {
-        const data = await CaseService.getCases();
-        setCases(data);
+        try {
+          console.log("[v0] Loading cases from database...");
+          const data = await CaseService.getCases();
+          console.log("[v0] Cases loaded successfully, count:", data.length);
+          setCases(data);
+        } catch (error) {
+          console.error("[v0] Error loading cases:", error);
+          setCases([]);
+        }
       };
       fetchCases();
     }
@@ -148,6 +155,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     try {
       let totalImported = 0;
       let totalFiles = 0;
+      let failedCases: string[] = [];
       
       for (let i = 0; i < files.length; i++) {
         const file = files[i] as File;
@@ -184,6 +192,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
               totalImported++;
             } else {
               console.error("[v0] Failed to import case:", caseToSave.title);
+              failedCases.push(caseToSave.title);
             }
           }
           totalFiles++;
@@ -195,20 +204,31 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         setImportProgress(Math.round(((i + 1) / files.length) * 100));
       }
       
+      console.log("[v0] Import complete. Total imported:", totalImported);
+      
       if (totalImported > 0) {
+        // Wait a moment for database to settle, then reload
+        await new Promise(resolve => setTimeout(resolve, 500));
         const freshData = await CaseService.getCases();
+        console.log("[v0] Reloaded cases count:", freshData.length);
         setCases(freshData);
-        alert(`Successfully imported ${totalImported} cases from ${totalFiles} file(s).`);
+        
+        let message = `Successfully imported ${totalImported} case(s) from ${totalFiles} file(s).`;
+        if (failedCases.length > 0) {
+          message += `\n\nFailed cases: ${failedCases.join(', ')}`;
+        }
+        alert(message);
       } else {
         alert(
           'No cases were imported. Possible issues:\n' +
-          '1. Supabase database table "cases" not created. Please run the setup SQL script.\n' +
-          '2. Check browser console for detailed error messages.\n' +
-          '3. Verify your Supabase VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set correctly.'
+          '1. Supabase database table "cases" not created.\n' +
+          '2. Check browser console for detailed error messages (press F12).\n' +
+          '3. Verify your Supabase credentials are set correctly.\n' +
+          '\nLook for [v0] messages in the console for more details.'
         );
       }
     } catch (err) {
-      console.error("Import error:", err);
+      console.error("[v0] Import error:", err);
       alert("Failed to import JSON. Please ensure the file format is correct and Supabase is configured.");
     } finally {
       setIsImporting(false);
@@ -219,22 +239,47 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.images.length === 0) return;
+    if (formData.images.length === 0) {
+      alert("Please add at least one image to the case.");
+      return;
+    }
     
     try {
+      console.log("[v0] Starting save operation...");
+      let saveResult = false;
+      
       if (editingCase) {
-        await CaseService.updateCase({ ...formData, id: editingCase.id, createdAt: editingCase.createdAt });
+        console.log("[v0] Updating existing case:", editingCase.id);
+        saveResult = await CaseService.updateCase({ ...formData, id: editingCase.id, createdAt: editingCase.createdAt });
       } else {
-        await CaseService.addCase(formData);
+        console.log("[v0] Adding new case:", formData.title);
+        const result = await CaseService.addCase(formData);
+        saveResult = result !== null;
+        
+        if (!saveResult) {
+          console.error("[v0] addCase returned null - likely database issue");
+          alert("Failed to save case. This may indicate a database connection problem. Check the Database Status above.");
+          return;
+        }
       }
+      
+      if (!saveResult && editingCase) {
+        alert("Failed to update case. Please try again.");
+        return;
+      }
+      
+      console.log("[v0] Save successful, reloading cases...");
       const data = await CaseService.getCases();
+      console.log("[v0] Loaded cases count:", data.length);
+      
       setCases(data);
       setIsAdding(false);
       setEditingCase(null);
       setFormData({ title: '', category: 'Prosthodontics', description: '', images: [] });
+      alert("Case saved successfully!");
     } catch (error) {
-      console.error("Save error:", error);
-      alert("Failed to save case. Please check if images are too large.");
+      console.error("[v0] Save error:", error);
+      alert("Failed to save case. Please check your database connection and try again.");
     }
   };
 
