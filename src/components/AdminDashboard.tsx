@@ -8,6 +8,47 @@ import { DatabaseStatus } from './DatabaseStatus';
 
 const categories = ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "Cosmetic Fillings"];
 
+// Image compression utility function
+const compressImage = (dataUrl: string, quality: number = 0.7, maxWidth: number = 1200, maxHeight: number = 1200): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      // Calculate new dimensions maintaining aspect ratio
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      const compressedUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve(compressedUrl);
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = dataUrl;
+  });
+};
+
 export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
@@ -239,6 +280,16 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validation
+    if (!formData.title.trim()) {
+      alert("Please enter a case title.");
+      return;
+    }
+    if (!formData.description.trim()) {
+      alert("Please enter a case description.");
+      return;
+    }
     if (formData.images.length === 0) {
       alert("Please add at least one image to the case.");
       return;
@@ -246,40 +297,66 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     
     try {
       console.log("[v0] Starting save operation...");
-      let saveResult = false;
+      console.log("[v0] Form data:", {
+        title: formData.title,
+        category: formData.category,
+        imagesCount: formData.images.length,
+        isEditing: !!editingCase
+      });
+      
+      let result = null;
+      let saveSuccess = false;
       
       if (editingCase) {
         console.log("[v0] Updating existing case:", editingCase.id);
-        saveResult = await CaseService.updateCase({ ...formData, id: editingCase.id, createdAt: editingCase.createdAt });
-      } else {
-        console.log("[v0] Adding new case:", formData.title);
-        const result = await CaseService.addCase(formData);
-        saveResult = result !== null;
+        saveSuccess = await CaseService.updateCase({ 
+          ...formData, 
+          id: editingCase.id, 
+          createdAt: editingCase.createdAt 
+        });
         
-        if (!saveResult) {
-          console.error("[v0] addCase returned null - likely database issue");
-          alert("Failed to save case. This may indicate a database connection problem. Check the Database Status above.");
+        if (!saveSuccess) {
+          alert("Failed to update case. Please check your Supabase configuration.");
           return;
         }
+      } else {
+        console.log("[v0] Adding new case:", formData.title);
+        result = await CaseService.addCase(formData);
+        
+        if (!result) {
+          console.error("[v0] addCase returned null - database issue or Supabase not configured");
+          alert("Failed to save case:\n\n1. Check if Supabase is configured (see Database Status above)\n2. Check browser console (F12) for detailed errors\n3. Ensure your database table exists");
+          return;
+        }
+        
+        saveSuccess = true;
+        console.log("[v0] New case created with ID:", result.id);
       }
       
-      if (!saveResult && editingCase) {
-        alert("Failed to update case. Please try again.");
+      if (!saveSuccess) {
+        alert("Failed to save case. Please try again.");
         return;
       }
       
+      // Wait a moment and reload
       console.log("[v0] Save successful, reloading cases...");
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       const data = await CaseService.getCases();
-      console.log("[v0] Loaded cases count:", data.length);
+      console.log("[v0] Cases reloaded, count:", data.length);
       
       setCases(data);
       setIsAdding(false);
       setEditingCase(null);
       setFormData({ title: '', category: 'Prosthodontics', description: '', images: [] });
       alert("Case saved successfully!");
+      
     } catch (error) {
       console.error("[v0] Save error:", error);
-      alert("Failed to save case. Please check your database connection and try again.");
+      if (error instanceof Error) {
+        console.error("[v0] Error details:", error.message);
+      }
+      alert("An unexpected error occurred. Please check the console for details.");
     }
   };
 
