@@ -1,198 +1,125 @@
-import { openDB, IDBPDatabase } from 'idb';
+import { 
+  collection, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  query, 
+  orderBy, 
+  setDoc,
+  serverTimestamp,
+  Timestamp
+} from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
 import { Case } from '../types';
-import { initialCases } from '../data/initialData';
-import { supabase } from '../lib/supabase';
 
-const DB_NAME = 'dentist_portfolio';
-const STORE_NAME = 'cases';
-const DB_VERSION = 1;
+const COLLECTION_NAME = 'cases';
 
-let dbPromise: Promise<IDBPDatabase<any>> | null = null;
-
-const getDB = () => {
-  if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        }
-      },
-    });
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: 'create' | 'update' | 'delete' | 'list' | 'get' | 'write';
+  path: string | null;
+  authInfo: {
+    userId: string;
+    email: string;
+    emailVerified: boolean;
+    isAnonymous: boolean;
+    providerInfo: { providerId: string; displayName: string; email: string; }[];
   }
-  return dbPromise;
+}
+
+const handleFirestoreError = (error: any, operationType: FirestoreErrorInfo['operationType'], path: string | null = null) => {
+  if (error.code === 'permission-denied') {
+    const user = auth.currentUser;
+    const errorInfo: FirestoreErrorInfo = {
+      error: error.message,
+      operationType,
+      path,
+      authInfo: {
+        userId: user?.uid || 'unauthenticated',
+        email: user?.email || 'N/A',
+        emailVerified: user?.emailVerified || false,
+        isAnonymous: user?.isAnonymous || false,
+        providerInfo: user?.providerData.map(p => ({
+          providerId: p.providerId,
+          displayName: p.displayName || '',
+          email: p.email || ''
+        })) || []
+      }
+    };
+    throw new Error(JSON.stringify(errorInfo));
+  }
+  throw error;
 };
 
 export const CaseService = {
-  migrateLocalToSupabase: async (): Promise<void> => {
-    const isMigrated = localStorage.getItem('supabase_migrated');
-    if (isMigrated) return;
-
-    try {
-      const db = await getDB();
-      const localCases = await db.getAll(STORE_NAME);
-
-      if (localCases.length > 0) {
-        console.log(`Migrating ${localCases.length} cases to Supabase...`);
-        const { error } = await supabase.from('cases').upsert(localCases);
-        if (error) throw error;
-        localStorage.setItem('supabase_migrated', 'true');
-        console.log('Migration successful');
-      } else {
-        // Even if local is empty, we mark as migrated to stop checking every time
-        localStorage.setItem('supabase_migrated', 'true');
-      }
-    } catch (e) {
-      console.error("Migration to Supabase failed", e);
-    }
-  },
-
-  syncAllToSupabase: async (): Promise<{ success: boolean; count: number; error?: any }> => {
-    try {
-      const db = await getDB();
-      const localCases = await db.getAll(STORE_NAME);
-
-      if (localCases.length === 0) {
-        return { success: true, count: 0 };
-      }
-
-      console.log(`Syncing ${localCases.length} cases to Supabase...`);
-      const { error } = await supabase.from('cases').upsert(localCases);
-      
-      if (error) throw error;
-      
-      localStorage.setItem('supabase_migrated', 'true');
-      return { success: true, count: localCases.length };
-    } catch (e) {
-      console.error("Sync to Supabase failed", e);
-      return { success: false, count: 0, error: e };
-    }
-  },
-
   getCases: async (): Promise<Case[]> => {
     try {
-      // Try fetching from Supabase first
-      const { data, error } = await supabase
-        .from('cases')
-        .select('*')
-        .order('createdAt', { ascending: false });
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        return data as Case[];
-      }
-
-      // If Supabase is empty, check if we need to migrate first
-      await CaseService.migrateLocalToSupabase();
-
-      // Recurse once if we just migrated
-      if (localStorage.getItem('supabase_migrated') === 'true') {
-        const { data: migratedData } = await supabase
-          .from('cases')
-          .select('*')
-          .order('createdAt', { ascending: false });
-        if (migratedData && migratedData.length > 0) return migratedData as Case[];
-      }
-
-      // Fallback to initial data if both are empty
-      return initialCases.sort((a, b) => b.createdAt - a.createdAt);
+      const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      })) as Case[];
     } catch (e) {
-      console.error("Failed to load cases from Supabase, falling back to local/initial", e);
-      // Fallback to local IndexedDB during errors
-      const db = await getDB();
-      const cases = await db.getAll(STORE_NAME);
-      return (cases.length > 0 ? cases : initialCases).sort((a, b) => b.createdAt - a.createdAt);
+      console.error("Failed to load cases from Firestore", e);
+      return [];
     }
   },
 
   addCase: async (newCase: Omit<Case, 'id' | 'createdAt'>): Promise<Case | null> => {
     try {
-      const id = crypto.randomUUID();
       const createdAt = Date.now();
-      const caseWithId = { ...newCase, id, createdAt } as Case;
+      // Use addDoc for auto-generated unique IDs to prevent collisions
+      const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+        ...newCase,
+        createdAt: createdAt
+      });
       
-      const { data, error } = await supabase
-        .from('cases')
-        .insert([caseWithId])
-        .select();
-
-      if (error) throw error;
+      // Update with the generated ID as a field for UI consistency
+      await updateDoc(docRef, { id: docRef.id });
       
-      // Also save to local for persistence during offline or errors
-      const db = await getDB();
-      await db.put(STORE_NAME, caseWithId);
-
-      return (data ? data[0] : caseWithId) as Case;
+      return { ...newCase, id: docRef.id, createdAt } as Case;
     } catch (e) {
-      console.error("Failed to save case to Supabase", e);
-      alert("Failed to save to cloud. Saved locally instead.");
-      
-      // Fallback local save
-      const db = await getDB();
-      const caseWithId = { ...newCase, id: Date.now().toString(), createdAt: Date.now() } as Case;
-      await db.put(STORE_NAME, caseWithId);
-      return caseWithId;
+      console.error("Failed to save case to Firestore", e);
+      handleFirestoreError(e, 'create', COLLECTION_NAME);
+      return null;
+    }
+  },
+
+  upsertCase: async (updatedCase: Case): Promise<boolean> => {
+    try {
+      const docRef = doc(db, COLLECTION_NAME, updatedCase.id);
+      // setDoc handles both create (if ID doesn't exist) and update
+      await setDoc(docRef, { ...updatedCase }, { merge: true });
+      return true;
+    } catch (e) {
+      console.error("Failed to upsert case in Firestore", e);
+      handleFirestoreError(e, 'write', `${COLLECTION_NAME}/${updatedCase.id}`);
+      return false;
     }
   },
 
   updateCase: async (updatedCase: Case): Promise<boolean> => {
     try {
-      const { error } = await supabase
-        .from('cases')
-        .upsert(updatedCase)
-        .eq('id', updatedCase.id);
-
-      if (error) throw error;
-
-      const db = await getDB();
-      await db.put(STORE_NAME, updatedCase);
+      const docRef = doc(db, COLLECTION_NAME, updatedCase.id);
+      await updateDoc(docRef, { ...updatedCase });
       return true;
     } catch (e) {
-      console.error("Failed to update case in Supabase", e);
-      return false;
-    }
-  },
-
-  importCases: async (cases: Case[]): Promise<boolean> => {
-    try {
-      if (cases.length === 0) return true;
-      
-      const { error } = await supabase
-        .from('cases')
-        .upsert(cases);
-
-      if (error) throw error;
-
-      const db = await getDB();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      for (const c of cases) {
-        await tx.store.put(c);
-      }
-      await tx.done;
-      
-      return true;
-    } catch (e) {
-      console.error("Failed to import cases to Supabase", e);
+      console.error("Failed to update case in Firestore", e);
+      handleFirestoreError(e, 'update', `${COLLECTION_NAME}/${updatedCase.id}`);
       return false;
     }
   },
 
   deleteCase: async (id: string): Promise<void> => {
     try {
-      const { error } = await supabase
-        .from('cases')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
-      const db = await getDB();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      await tx.store.delete(id);
-      await tx.done;
+      const docRef = doc(db, COLLECTION_NAME, id);
+      await deleteDoc(docRef);
     } catch (e) {
-      console.error("Failed to delete case from Supabase", e);
-      throw e;
+      console.error("Failed to delete case from Firestore", e);
+      handleFirestoreError(e, 'delete', `${COLLECTION_NAME}/${id}`);
     }
   }
 };

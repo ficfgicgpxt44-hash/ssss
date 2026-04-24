@@ -1,22 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download, RefreshCw, Cloud } from 'lucide-react';
-import { openDB } from 'idb';
+import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download, LogIn } from 'lucide-react';
 import heic2any from 'heic2any';
 import { Case } from '../types';
 import { CaseService } from '../services/CaseService';
+import { useAuth } from './FirebaseProvider';
 
 const categories = ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "Cosmetic Fillings"];
 
 export default function AdminDashboard({ onClose }: { onClose: () => void }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState(false);
+  const { user, login, isAdmin, logout, loading } = useAuth();
   
   const [cases, setCases] = useState<Case[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [editingCase, setEditingCase] = useState<Case | null>(null);
   const [formData, setFormData] = useState<Omit<Case, 'id' | 'createdAt'>>({
@@ -26,31 +23,19 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     images: []
   });
 
-  const [isOptimizing, setIsOptimizing] = useState(false);
-  const [optimizationProgress, setOptimizationProgress] = useState(0);
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const savedPassword = localStorage.getItem('admin_password') || 'QQwerty@@1123456';
-    if (password === savedPassword) {
-      setIsAuthenticated(true);
-      setLoginError(false);
-    } else {
-      setLoginError(true);
-    }
-  };
-
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAdmin) {
       const fetchCases = async () => {
         const data = await CaseService.getCases();
         setCases(data);
       };
       fetchCases();
     }
-  }, [isAuthenticated]);
+  }, [isAdmin]);
 
-  if (!isAuthenticated) {
+  if (loading) return null;
+
+  if (!isAdmin) {
     return (
       <div className="fixed inset-0 z-[300] bg-dark/95 backdrop-blur-xl flex items-center justify-center p-6" dir="ltr">
         <motion.div 
@@ -62,24 +47,28 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             <LayoutDashboard className="w-10 h-10" />
           </div>
           <h2 className="text-3xl font-serif text-white mb-2">Private Area</h2>
-          <p className="text-white/40 mb-8 font-light">Please enter password to access dashboard</p>
+          <p className="text-white/40 mb-8 font-light">
+            {user ? "You don't have admin permissions." : "Please sign in with Google to access dashboard"}
+          </p>
           
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input 
-              autoFocus
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className={`w-full bg-white/5 border ${loginError ? 'border-red-500' : 'border-white/10'} rounded-2xl p-5 text-center text-white focus:border-gold outline-none transition-all text-xl tracking-[1em]`}
-            />
-            {loginError && <p className="text-red-500 text-xs">Incorrect password!</p>}
-            <button 
-              type="submit"
-              className="w-full bg-gold text-dark py-5 rounded-2xl font-bold text-lg hover:opacity-90 transition-all shadow-xl shadow-gold/20"
-            >
-              Enter
-            </button>
+          <div className="space-y-4">
+            {!user ? (
+              <button 
+                onClick={() => login()}
+                className="w-full bg-gold text-dark py-5 rounded-2xl font-bold text-lg hover:opacity-90 transition-all shadow-xl shadow-gold/20 flex items-center justify-center gap-3"
+              >
+                <LogIn className="w-6 h-6" />
+                Sign in with Google
+              </button>
+            ) : (
+              <button 
+                onClick={() => logout()}
+                className="w-full bg-red-500/10 text-red-500 border border-red-500/20 py-5 rounded-2xl font-bold text-lg hover:bg-red-500 hover:text-white transition-all shadow-xl"
+              >
+                Switch Account / Logout
+              </button>
+            )}
+            
             <button 
               type="button"
               onClick={onClose}
@@ -87,33 +76,13 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             >
               Cancel
             </button>
-          </form>
+          </div>
         </motion.div>
       </div>
     );
   }
 
   // Dashboard content follows
-
-  const handleSync = async () => {
-    setIsSyncing(true);
-    try {
-      const result = await CaseService.syncAllToSupabase();
-      if (result.success) {
-        alert(`Successfully synced ${result.count} cases to cloud.`);
-        const freshData = await CaseService.getCases();
-        setCases(freshData);
-      } else {
-        console.error("Sync error details:", result.error);
-        alert(`Sync failed: ${result.error?.message || 'Unknown error'}. Make sure your Supabase table 'cases' exists.`);
-      }
-    } catch (err) {
-      console.error("Sync error:", err);
-      alert("Failed to sync cases.");
-    } finally {
-      setIsSyncing(false);
-    }
-  };
 
   const compressImage = (base64Str: string, maxWidth = 720, maxHeight = 720): Promise<string> => {
     return new Promise((resolve) => {
@@ -160,7 +129,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []) as File[];
+    const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
     setIsImporting(true);
@@ -169,21 +138,22 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     try {
       let totalImported = 0;
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+        const file = files[i] as File;
         const text = await file.text();
         let importedData = JSON.parse(text);
         
-        const casesToImport: Case[] = (Array.isArray(importedData) ? importedData : [importedData]).map(c => ({
-          ...c,
-          id: c.id || crypto.randomUUID(),
-          createdAt: c.createdAt || Date.now()
-        }));
+        // Handle both single case or array of cases
+        const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
         
-        const success = await CaseService.importCases(casesToImport);
-        if (success) {
-          totalImported += casesToImport.length;
-        } else {
-          throw new Error("Failed to save some cases to cloud");
+        for (const c of casesToImport) {
+          const id = c.id || Math.random().toString(36).substring(7);
+          const createdAt = c.createdAt || Date.now();
+          await CaseService.upsertCase({ 
+            ...c, 
+            id,
+            createdAt
+          });
+          totalImported++;
         }
         
         setImportProgress(Math.round(((i + 1) / files.length) * 100));
@@ -275,15 +245,6 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             </button>
             
             <button 
-              onClick={handleSync}
-              disabled={isSyncing}
-              className={`w-full flex items-center gap-3 px-4 py-3 bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white rounded-xl font-bold transition-all border border-green-500/20 ${isSyncing ? 'opacity-50' : ''}`}
-            >
-              <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Syncing...' : 'Sync All to Cloud'}
-            </button>
-            
-            <button 
               onClick={async () => {
                 const data = await CaseService.getCases();
                 if (data.length === 0) {
@@ -334,29 +295,15 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
                 {isImporting ? `Importing ${importProgress}%` : 'Import JSON Files'}
               </label>
             </div>
-
-            <button 
-              onClick={() => {
-                const newPass = prompt('Enter new password:');
-                if (newPass) {
-                  localStorage.setItem('admin_password', newPass);
-                  alert('Password changed successfully');
-                }
-              }}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 rounded-xl font-bold transition-all border border-white/5"
-            >
-              <Edit3 className="w-5 h-5" />
-              Change Password
-            </button>
           </nav>
         </div>
 
         <button 
-          onClick={onClose}
+          onClick={() => { logout(); onClose(); }}
           className="flex items-center gap-3 px-4 py-3 text-white/40 hover:text-white transition-colors font-bold"
         >
           <LogOut className="w-5 h-5" />
-          Exit to Website
+          Logout & Exit
         </button>
       </aside>
 
@@ -365,21 +312,9 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         <header className="flex justify-between items-center mb-12">
           <div className="flex flex-col">
             <h1 className="text-4xl font-serif text-white">Clinical Case Management</h1>
-            <p className="text-white/20 text-xs mt-2 italic">You can upload images directly from your device</p>
+            <p className="text-white/20 text-xs mt-2 italic">Managed via Firebase Firestore</p>
           </div>
           <div className="flex gap-4">
-            <button 
-              onClick={async () => {
-                if(confirm('All data will be erased, are you sure?')) {
-                  const db = await openDB('dentist_portfolio', 1);
-                  await db.clear('cases');
-                  setCases([]);
-                }
-              }}
-              className="px-6 py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl font-bold hover:bg-red-500 hover:text-white transition-all text-xs"
-            >
-              Clear All
-            </button>
             <button 
               onClick={() => { setIsAdding(true); setEditingCase(null); }}
               className="px-6 py-3 bg-white/5 border border-white/10 text-white rounded-xl font-bold hover:border-gold transition-all"
