@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download, LogIn } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download, LogIn, CloudUpload } from 'lucide-react';
 import heic2any from 'heic2any';
 import { Case } from '../types';
 import { CaseService } from '../services/CaseService';
@@ -15,6 +15,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [isAdding, setIsAdding] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [hasBackup, setHasBackup] = useState(false);
   const [editingCase, setEditingCase] = useState<Case | null>(null);
   const [formData, setFormData] = useState<Omit<Case, 'id' | 'createdAt'>>({
     title: '',
@@ -30,8 +31,63 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         setCases(data);
       };
       fetchCases();
+
+      // Check for local backup
+      const backup = localStorage.getItem('cases_emergency_backup');
+      if (backup) {
+        try {
+          const parsed = JSON.parse(backup);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setHasBackup(true);
+          }
+        } catch (e) {
+          setHasBackup(false);
+        }
+      }
     }
   }, [isAdmin]);
+
+  const handleSyncBackup = async () => {
+    const backup = localStorage.getItem('cases_emergency_backup');
+    if (!backup) return;
+
+    if (!confirm('This will upload all cases from your local emergency backup to the new database. Continue?')) {
+      return;
+    }
+
+    setIsImporting(true);
+    setImportProgress(0);
+    
+    try {
+      const casesToImport = JSON.parse(backup) as Case[];
+      let totalImported = 0;
+
+      for (let i = 0; i < casesToImport.length; i++) {
+        const c = casesToImport[i];
+        try {
+          const success = await CaseService.upsertCase({
+            ...c,
+            createdAt: c.createdAt || Date.now()
+          });
+          if (success) totalImported++;
+        } catch (err) {
+          console.error("Error syncing case:", err);
+        }
+        setImportProgress(Math.round(((i + 1) / casesToImport.length) * 100));
+      }
+
+      alert(`Successfully synced ${totalImported} cases to the new database.`);
+      const data = await CaseService.getCases(true); // force refresh
+      setCases(data);
+      setHasBackup(false);
+    } catch (err) {
+      console.error("Sync error:", err);
+      alert("Failed to sync backup.");
+    } finally {
+      setIsImporting(false);
+      setImportProgress(0);
+    }
+  };
 
   if (loading) return null;
 
@@ -84,7 +140,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   // Dashboard content follows
 
-  const compressImage = (base64Str: string, maxWidth = 720, maxHeight = 720): Promise<string> => {
+  const compressImage = (base64Str: string, maxWidth = 640, maxHeight = 640): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onerror = () => {
@@ -117,8 +173,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             return;
           }
           ctx.drawImage(img, 0, 0, width, height);
-          // Very aggressive compression: 0.4 quality for clinical photos is usually enough for web review
-          resolve(canvas.toDataURL('image/jpeg', 0.4));
+          // High compression (0.3) to ensure 30 images fit in 1MB Firestore doc
+          resolve(canvas.toDataURL('image/jpeg', 0.3));
         } catch (err) {
           console.error("Compression error:", err);
           resolve(base64Str);
@@ -273,14 +329,91 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             <span className="font-serif font-bold text-white text-xl">Dashboard</span>
           </div>
           
-          <nav className="space-y-4">
-            <button 
-              onClick={() => { setIsAdding(true); setEditingCase(null); }}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-gold text-dark rounded-xl font-bold transition-all"
-            >
-              <Plus className="w-5 h-5" />
-              Add Case
-            </button>
+            <nav className="space-y-4">
+              <button 
+                onClick={() => { setIsAdding(true); setEditingCase(null); }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-gold text-dark rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-gold/10"
+              >
+                <Plus className="w-5 h-5" />
+                Add New Case
+              </button>
+
+              <button
+                onClick={async () => {
+                  const backup = localStorage.getItem('cases_emergency_backup');
+                  let source: Case[] = [];
+                  let mode = "";
+
+                  if (backup) {
+                    try {
+                      source = JSON.parse(backup);
+                      mode = "Emergency Backup";
+                    } catch (e) {
+                      source = cases;
+                      mode = "Current View";
+                    }
+                  } else {
+                    source = cases;
+                    mode = "Current View";
+                  }
+                  
+                  if (source.length === 0) {
+                    alert("No cases found in current view or local backup to sync.");
+                    return;
+                  }
+
+                  if (!confirm(`Save all ${source.length} cases from ${mode} to the new cloud database?`)) return;
+                  
+                  setIsImporting(true);
+                  setImportProgress(0);
+                  let successCount = 0;
+                  
+                  for (let i = 0; i < source.length; i++) {
+                    const c = source[i];
+                    
+                    // Re-compress images during sync if they are large or from old backup
+                    const processedImages = await Promise.all((c.images || []).map(async (img) => {
+                      if (img.length > 50000) { // If image is > 50KB, try re-compressing
+                         return await compressImage(img);
+                      }
+                      return img;
+                    }));
+
+                    const success = await CaseService.upsertCase({ ...c, images: processedImages });
+                    if (success) successCount++;
+                    setImportProgress(Math.round(((i + 1) / source.length) * 100));
+                  }
+                  
+                  alert(`Sync complete: ${successCount} cases saved to Cloud.`);
+                  setIsImporting(false);
+                  setImportProgress(0);
+                  // Refresh from server to be sure
+                  const freshData = await CaseService.getCases(true);
+                  setCases(freshData);
+                }}
+                disabled={isImporting}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl font-bold transition-all border border-emerald-500/20 disabled:opacity-50 shadow-lg shadow-emerald-500/5"
+              >
+                <CloudUpload className={`w-5 h-5 ${isImporting ? 'animate-bounce' : ''}`} />
+                <span>Sync All to Cloud</span>
+              </button>
+
+              {hasBackup && (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <p className="text-[10px] text-amber-500 font-bold uppercase tracking-tighter">Backup Detected</p>
+                  </div>
+                  <button
+                    onClick={handleSyncBackup}
+                    disabled={isImporting}
+                    className="w-full py-2 bg-amber-500 text-dark rounded-xl font-bold text-xs hover:bg-gold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <CloudUpload className="w-4 h-4" />
+                    Restore Now
+                  </button>
+                </div>
+              )}
             
             <button 
               onClick={async () => {

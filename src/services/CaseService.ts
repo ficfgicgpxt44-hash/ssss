@@ -70,8 +70,10 @@ export const CaseService = {
 
     try {
       const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
-      // Use getDocsFromServer to ensure we hit the real quota check first
-      const querySnapshot = await getDocsFromServer(q);
+      
+      // Use getDocs instead of getDocsFromServer to utilize cache when possible, unless forced
+      const querySnapshot = forceRefresh ? await getDocsFromServer(q) : await getDocs(q);
+      
       const cases = querySnapshot.docs.map(doc => ({
         ...doc.data(),
         id: doc.id
@@ -162,22 +164,30 @@ export const CaseService = {
 
   upsertCase: async (updatedCase: Case): Promise<boolean> => {
     try {
-      const dataSize = JSON.stringify(updatedCase).length;
+      // Ensure we have an ID for the doc reference
+      const finalId = updatedCase.id || Math.random().toString(36).substring(7);
+      const docData = { ...updatedCase, id: finalId };
+
+      const dataSize = JSON.stringify(docData).length;
       if (dataSize > 1000000) {
-        console.warn(`Case ${updatedCase.id} is too large (${dataSize} bytes). Skipping or needs compression.`);
+        console.warn(`Case ${finalId} is too large (${dataSize} bytes). skipping...`);
         return false;
       }
 
-      const docRef = doc(db, COLLECTION_NAME, updatedCase.id);
-      // setDoc handles both create (if ID doesn't exist) and update
-      await setDoc(docRef, { ...updatedCase }, { merge: true });
+      const docRef = doc(db, COLLECTION_NAME, finalId);
+      await setDoc(docRef, docData, { merge: true });
+      
+      // Invalidate cache
+      inMemoryCache = null;
+      lastFetchTime = 0;
+      
       return true;
     } catch (e: any) {
-      console.error("Failed to upsert case in Firestore", e);
-      if (e.message && e.message.includes('Quota exceeded')) {
-        console.error("Quota exceeded during upsert");
+      console.error("UPSERT FAIL:", e);
+      if (e.message && e.message.includes('Quota exceeded') || e.code === 'resource-exhausted') {
+         alert("Firebase Quota Exceeded for today. Data might not be saved properly. It will reset tomorrow.");
       }
-      handleFirestoreError(e, 'write', `${COLLECTION_NAME}/${updatedCase.id}`);
+      handleFirestoreError(e, 'write', `${COLLECTION_NAME}/${updatedCase.id || 'new'}`);
       return false;
     }
   },
