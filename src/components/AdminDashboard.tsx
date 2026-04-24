@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download } from 'lucide-react';
+import { openDB } from 'idb';
 import heic2any from 'heic2any';
 import { Case } from '../types';
 import { CaseService } from '../services/CaseService';
-import { DatabaseStatus } from './DatabaseStatus';
 
 const categories = ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "Cosmetic Fillings"];
 
@@ -42,15 +42,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (isAuthenticated) {
       const fetchCases = async () => {
-        try {
-          console.log("[v0] Loading cases from database...");
-          const data = await CaseService.getCases();
-          console.log("[v0] Cases loaded successfully, count:", data.length);
-          setCases(data);
-        } catch (error) {
-          console.error("[v0] Error loading cases:", error);
-          setCases([]);
-        }
+        const data = await CaseService.getCases();
+        setCases(data);
       };
       fetchCases();
     }
@@ -154,82 +147,32 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     
     try {
       let totalImported = 0;
-      let totalFiles = 0;
-      let failedCases: string[] = [];
-      
       for (let i = 0; i < files.length; i++) {
-        const file = files[i] as File;
+        const file = files[i];
+        const text = await file.text();
+        let importedData = JSON.parse(text);
         
-        try {
-          const text = await file.text();
-          let importedData = JSON.parse(text);
-          
-          // Handle both single case or array of cases
-          const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
-          
-          for (const c of casesToImport) {
-            // Ensure required fields exist
-            const caseToSave: Case = {
-              id: c.id || crypto.randomUUID(),
-              title: c.title || 'Untitled Case',
-              category: c.category || 'Prosthodontics',
-              description: c.description || '',
-              images: Array.isArray(c.images) ? c.images : [],
-              createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now()
-            };
-            
-            console.log("[v0] Attempting to import case:", caseToSave.title);
-            
-            const result = await CaseService.addCase({
-              title: caseToSave.title,
-              category: caseToSave.category,
-              description: caseToSave.description,
-              images: caseToSave.images
-            });
-            
-            if (result) {
-              console.log("[v0] Case imported successfully:", result.id);
-              totalImported++;
-            } else {
-              console.error("[v0] Failed to import case:", caseToSave.title);
-              failedCases.push(caseToSave.title);
-            }
-          }
-          totalFiles++;
-        } catch (fileError) {
-          console.error(`Error processing file ${file.name}:`, fileError);
-          alert(`Failed to process file "${file.name}". Please ensure it's valid JSON.`);
+        // Handle both single case or array of cases
+        const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
+        
+        for (const c of casesToImport) {
+          await CaseService.updateCase({ 
+            ...c, 
+            id: c.id || Date.now().toString() + Math.random(),
+            createdAt: c.createdAt || Date.now()
+          });
+          totalImported++;
         }
         
         setImportProgress(Math.round(((i + 1) / files.length) * 100));
       }
       
-      console.log("[v0] Import complete. Total imported:", totalImported);
-      
-      if (totalImported > 0) {
-        // Wait a moment for database to settle, then reload
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const freshData = await CaseService.getCases();
-        console.log("[v0] Reloaded cases count:", freshData.length);
-        setCases(freshData);
-        
-        let message = `Successfully imported ${totalImported} case(s) from ${totalFiles} file(s).`;
-        if (failedCases.length > 0) {
-          message += `\n\nFailed cases: ${failedCases.join(', ')}`;
-        }
-        alert(message);
-      } else {
-        alert(
-          'No cases were imported. Possible issues:\n' +
-          '1. Supabase database table "cases" not created.\n' +
-          '2. Check browser console for detailed error messages (press F12).\n' +
-          '3. Verify your Supabase credentials are set correctly.\n' +
-          '\nLook for [v0] messages in the console for more details.'
-        );
-      }
+      const freshData = await CaseService.getCases();
+      setCases(freshData);
+      alert(`Successfully imported ${totalImported} cases.`);
     } catch (err) {
-      console.error("[v0] Import error:", err);
-      alert("Failed to import JSON. Please ensure the file format is correct and Supabase is configured.");
+      console.error("Import error:", err);
+      alert("Failed to import JSON. Please ensure the file format is correct.");
     } finally {
       setIsImporting(false);
       setImportProgress(0);
@@ -239,47 +182,22 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.images.length === 0) {
-      alert("Please add at least one image to the case.");
-      return;
-    }
+    if (formData.images.length === 0) return;
     
     try {
-      console.log("[v0] Starting save operation...");
-      let saveResult = false;
-      
       if (editingCase) {
-        console.log("[v0] Updating existing case:", editingCase.id);
-        saveResult = await CaseService.updateCase({ ...formData, id: editingCase.id, createdAt: editingCase.createdAt });
+        await CaseService.updateCase({ ...formData, id: editingCase.id, createdAt: editingCase.createdAt });
       } else {
-        console.log("[v0] Adding new case:", formData.title);
-        const result = await CaseService.addCase(formData);
-        saveResult = result !== null;
-        
-        if (!saveResult) {
-          console.error("[v0] addCase returned null - likely database issue");
-          alert("Failed to save case. This may indicate a database connection problem. Check the Database Status above.");
-          return;
-        }
+        await CaseService.addCase(formData);
       }
-      
-      if (!saveResult && editingCase) {
-        alert("Failed to update case. Please try again.");
-        return;
-      }
-      
-      console.log("[v0] Save successful, reloading cases...");
       const data = await CaseService.getCases();
-      console.log("[v0] Loaded cases count:", data.length);
-      
       setCases(data);
       setIsAdding(false);
       setEditingCase(null);
       setFormData({ title: '', category: 'Prosthodontics', description: '', images: [] });
-      alert("Case saved successfully!");
     } catch (error) {
-      console.error("[v0] Save error:", error);
-      alert("Failed to save case. Please check your database connection and try again.");
+      console.error("Save error:", error);
+      alert("Failed to save case. Please check if images are too large.");
     }
   };
 
@@ -421,13 +339,10 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
           <div className="flex gap-4">
             <button 
               onClick={async () => {
-                if(confirm('All data will be erased from database, are you sure?')) {
-                  try {
-                    await CaseService.clearAllCases();
-                    setCases([]);
-                  } catch (err) {
-                    alert('Failed to clear database');
-                  }
+                if(confirm('All data will be erased, are you sure?')) {
+                  const db = await openDB('dentist_portfolio', 1);
+                  await db.clear('cases');
+                  setCases([]);
                 }
               }}
               className="px-6 py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl font-bold hover:bg-red-500 hover:text-white transition-all text-xs"
@@ -444,7 +359,6 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         </header>
 
         <div className="grid grid-cols-1 gap-6">
-          <DatabaseStatus />
           <AnimatePresence mode="popLayout">
             {cases.map((c) => (
               <motion.div 
