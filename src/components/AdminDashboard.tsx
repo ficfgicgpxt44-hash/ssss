@@ -4,6 +4,7 @@ import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Do
 import heic2any from 'heic2any';
 import { Case } from '../types';
 import { CaseService } from '../services/CaseService';
+import { DatabaseStatus } from './DatabaseStatus';
 
 const categories = ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "Cosmetic Fillings"];
 
@@ -169,6 +170,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
               createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now()
             };
             
+            console.log("[v0] Attempting to import case:", caseToSave.title);
+            
             const result = await CaseService.addCase({
               title: caseToSave.title,
               category: caseToSave.category,
@@ -177,7 +180,10 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             });
             
             if (result) {
+              console.log("[v0] Case imported successfully:", result.id);
               totalImported++;
+            } else {
+              console.error("[v0] Failed to import case:", caseToSave.title);
             }
           }
           totalFiles++;
@@ -194,7 +200,12 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         setCases(freshData);
         alert(`Successfully imported ${totalImported} cases from ${totalFiles} file(s).`);
       } else {
-        alert('No cases were imported. Please check your JSON files.');
+        alert(
+          'No cases were imported. Possible issues:\n' +
+          '1. Supabase database table "cases" not created. Please run the setup SQL script.\n' +
+          '2. Check browser console for detailed error messages.\n' +
+          '3. Verify your Supabase VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set correctly.'
+        );
       }
     } catch (err) {
       console.error("Import error:", err);
@@ -388,6 +399,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         </header>
 
         <div className="grid grid-cols-1 gap-6">
+          <DatabaseStatus />
           <AnimatePresence mode="popLayout">
             {cases.map((c) => (
               <motion.div 
