@@ -32,7 +32,7 @@ export const CaseService = {
 
   addCase: async (newCase: Omit<Case, 'id' | 'createdAt'>): Promise<Case | null> => {
     if (!isSupabaseConfigured()) {
-      alert("Please configure SUPABASE_URL and SUPABASE_ANON_KEY in your environment.");
+      console.error("Supabase is not configured.");
       return null;
     }
 
@@ -47,11 +47,16 @@ export const CaseService = {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase insert error:", error);
+        throw error;
+      }
+      
+      console.log("[v0] Case added successfully:", id);
       return data as Case;
     } catch (e) {
       console.error("Failed to save case to Supabase", e);
-      alert("Failed to save case. Please check your Supabase configuration and permissions.");
+      // Return null silently instead of alerting - the caller can handle errors
       return null;
     }
   },

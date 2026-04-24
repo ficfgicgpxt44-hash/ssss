@@ -146,32 +146,59 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     
     try {
       let totalImported = 0;
+      let totalFiles = 0;
+      
       for (let i = 0; i < files.length; i++) {
         const file = files[i] as File;
-        const text = await file.text();
-        let importedData = JSON.parse(text);
         
-        // Handle both single case or array of cases
-        const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
-        
-        for (const c of casesToImport) {
-          await CaseService.updateCase({ 
-            ...c, 
-            id: c.id || Date.now().toString() + Math.random(),
-            createdAt: c.createdAt || Date.now()
-          });
-          totalImported++;
+        try {
+          const text = await file.text();
+          let importedData = JSON.parse(text);
+          
+          // Handle both single case or array of cases
+          const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
+          
+          for (const c of casesToImport) {
+            // Ensure required fields exist
+            const caseToSave: Case = {
+              id: c.id || crypto.randomUUID(),
+              title: c.title || 'Untitled Case',
+              category: c.category || 'Prosthodontics',
+              description: c.description || '',
+              images: Array.isArray(c.images) ? c.images : [],
+              createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now()
+            };
+            
+            const result = await CaseService.addCase({
+              title: caseToSave.title,
+              category: caseToSave.category,
+              description: caseToSave.description,
+              images: caseToSave.images
+            });
+            
+            if (result) {
+              totalImported++;
+            }
+          }
+          totalFiles++;
+        } catch (fileError) {
+          console.error(`Error processing file ${file.name}:`, fileError);
+          alert(`Failed to process file "${file.name}". Please ensure it's valid JSON.`);
         }
         
         setImportProgress(Math.round(((i + 1) / files.length) * 100));
       }
       
-      const freshData = await CaseService.getCases();
-      setCases(freshData);
-      alert(`Successfully imported ${totalImported} cases.`);
+      if (totalImported > 0) {
+        const freshData = await CaseService.getCases();
+        setCases(freshData);
+        alert(`Successfully imported ${totalImported} cases from ${totalFiles} file(s).`);
+      } else {
+        alert('No cases were imported. Please check your JSON files.');
+      }
     } catch (err) {
       console.error("Import error:", err);
-      alert("Failed to import JSON. Please ensure the file format is correct.");
+      alert("Failed to import JSON. Please ensure the file format is correct and Supabase is configured.");
     } finally {
       setIsImporting(false);
       setImportProgress(0);
