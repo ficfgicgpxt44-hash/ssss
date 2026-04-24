@@ -135,36 +135,74 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     setIsImporting(true);
     setImportProgress(0);
     
+    let totalFiles = files.length;
+    let totalImported = 0;
+    let totalSkipped = 0;
+    let totalFailed = 0;
+
     try {
-      let totalImported = 0;
       for (let i = 0; i < files.length; i++) {
-        const file = files[i] as File;
-        const text = await file.text();
-        let importedData = JSON.parse(text);
-        
-        // Handle both single case or array of cases
-        const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
-        
-        for (const c of casesToImport) {
-          const id = c.id || Math.random().toString(36).substring(7);
-          const createdAt = c.createdAt || Date.now();
-          await CaseService.upsertCase({ 
-            ...c, 
-            id,
-            createdAt
-          });
-          totalImported++;
+        const file = files[i];
+        try {
+          const text = await file.text();
+          let importedData = JSON.parse(text);
+          
+          // Handle both single case or array of cases
+          const casesToImport: Case[] = Array.isArray(importedData) ? importedData : [importedData];
+          
+          for (let j = 0; j < casesToImport.length; j++) {
+            const c = casesToImport[j];
+            try {
+              const id = c.id || Math.random().toString(36).substring(7);
+              const createdAt = c.createdAt || Date.now();
+              
+              // Compress images on import if they are base64
+              const compressedImages = await Promise.all((c.images || []).map(async (img) => {
+                if (img.startsWith('data:image')) {
+                  return await compressImage(img);
+                }
+                return img;
+              }));
+
+              const success = await CaseService.upsertCase({ 
+                ...c, 
+                id,
+                createdAt,
+                images: compressedImages
+              });
+              
+              if (success) {
+                totalImported++;
+              } else {
+                totalSkipped++;
+              }
+            } catch (caseErr) {
+              console.error(`Error importing case ${c.title || 'unknown'}`, caseErr);
+              totalFailed++;
+            }
+            
+            // Sub-progress for files with many cases
+            const subProgress = Math.round(((i + (j + 1) / casesToImport.length) / totalFiles) * 100);
+            setImportProgress(Math.min(subProgress, 99));
+          }
+        } catch (fileErr) {
+          console.error(`Error processing file ${file.name}`, fileErr);
+          totalFailed++;
         }
         
-        setImportProgress(Math.round(((i + 1) / files.length) * 100));
+        setImportProgress(Math.round(((i + 1) / totalFiles) * 100));
       }
       
       const freshData = await CaseService.getCases();
       setCases(freshData);
-      alert(`Successfully imported ${totalImported} cases.`);
+      
+      let summary = `Import finished.\n- Success: ${totalImported}`;
+      if (totalSkipped > 0) summary += `\n- Skipped (too large): ${totalSkipped}`;
+      if (totalFailed > 0) summary += `\n- Failed (errors): ${totalFailed}`;
+      alert(summary);
     } catch (err) {
-      console.error("Import error:", err);
-      alert("Failed to import JSON. Please ensure the file format is correct.");
+      console.error("Global Import error:", err);
+      alert("Failed to complete import. See console for details.");
     } finally {
       setIsImporting(false);
       setImportProgress(0);
