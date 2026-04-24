@@ -1,224 +1,137 @@
-import { 
-  collection, 
-  getDocs, 
-  getDocsFromCache,
-  getDocsFromServer,
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  query, 
-  orderBy, 
-  setDoc,
-  serverTimestamp,
-  Timestamp
-} from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
+import { initialCases } from '../data/initialData';
+import { FirebaseCaseService } from './FirebaseCaseService';
+import { openDB, IDBPDatabase } from 'idb';
 import { Case } from '../types';
 
-const COLLECTION_NAME = 'cases';
+const DB_NAME = 'dentist_portfolio_v2';
+const STORE_NAME = 'cases';
+const DB_VERSION = 1;
 
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: 'create' | 'update' | 'delete' | 'list' | 'get' | 'write';
-  path: string | null;
-  authInfo: {
-    userId: string;
-    email: string;
-    emailVerified: boolean;
-    isAnonymous: boolean;
-    providerInfo: { providerId: string; displayName: string; email: string; }[];
-  }
-}
+let dbPromise: Promise<IDBPDatabase<any>> | null = null;
 
-const handleFirestoreError = (error: any, operationType: FirestoreErrorInfo['operationType'], path: string | null = null) => {
-  if (error.code === 'permission-denied') {
-    const user = auth.currentUser;
-    const errorInfo: FirestoreErrorInfo = {
-      error: error.message,
-      operationType,
-      path,
-      authInfo: {
-        userId: user?.uid || 'unauthenticated',
-        email: user?.email || 'N/A',
-        emailVerified: user?.emailVerified || false,
-        isAnonymous: user?.isAnonymous || false,
-        providerInfo: user?.providerData.map(p => ({
-          providerId: p.providerId,
-          displayName: p.displayName || '',
-          email: p.email || ''
-        })) || []
-      }
-    };
-    throw new Error(JSON.stringify(errorInfo));
+const getDB = () => {
+  if (!dbPromise) {
+    dbPromise = openDB(DB_NAME, DB_VERSION, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        }
+      },
+    });
   }
-  throw error;
+  return dbPromise;
 };
 
-let inMemoryCache: Case[] | null = null;
-let lastFetchTime = 0;
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
-
 export const CaseService = {
-  getCases: async (forceRefresh: boolean = false): Promise<Case[]> => {
-    const now = Date.now();
-    
-    // 0. Return in-memory cache if fresh
-    if (!forceRefresh && inMemoryCache && (now - lastFetchTime < CACHE_TTL)) {
-      return inMemoryCache;
-    }
+  migrateLocalToFirebase: async (): Promise<void> => {
+    localStorage.setItem('firebase_migrated', 'true');
+  },
 
+  syncAllToFirebase: async (): Promise<{ success: boolean; count: number; error?: any }> => {
     try {
-      const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
+      const db = await getDB();
+      const localCases = await db.getAll(STORE_NAME);
       
-      // Use getDocs instead of getDocsFromServer to utilize cache when possible, unless forced
-      const querySnapshot = forceRefresh ? await getDocsFromServer(q) : await getDocs(q);
+      if (localCases.length === 0) return { success: true, count: 0 };
       
-      const cases = querySnapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id
-      })) as Case[];
-      
-      // Update caches
-      inMemoryCache = cases;
-      lastFetchTime = now;
-
-      // Mirror to localStorage for emergency quota fallback
-      try {
-        localStorage.setItem('cases_emergency_backup', JSON.stringify(cases));
-      } catch (e) {
-        console.warn("Failed to update emergency backup", e);
+      for (const c of localCases) {
+        const { id, ...data } = c;
+        await FirebaseCaseService.addCase(data);
       }
       
-      return cases;
-    } catch (e: any) {
-      if (e.message && (e.message.includes('Quota exceeded') || e.code === 'resource-exhausted')) {
-        console.warn("Firebase Quota Limit Reached. Falling back to Emergency Local Backup.");
-        
-        // 1. Try In-Memory first (even if stale)
-        if (inMemoryCache) return inMemoryCache;
+      return { success: true, count: localCases.length };
+    } catch (e) {
+      return { success: false, count: 0, error: e };
+    }
+  },
 
-        // 2. Try Firestore's internal persisted cache
-        try {
-          const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
-          const cachedSnapshot = await getDocsFromCache(q);
-          const cachedCases = cachedSnapshot.docs.map(doc => ({
-            ...doc.data(),
-            id: doc.id
-          })) as Case[];
-          if (cachedCases.length > 0) {
-            inMemoryCache = cachedCases;
-            return cachedCases;
-          }
-        } catch (cacheErr) {
-          console.warn("Firestore internal cache failed, trying manual backup...", cacheErr);
-        }
+  getCases: async (): Promise<Case[]> => {
+    try {
+      const cases = await FirebaseCaseService.getCases();
+      if (cases.length > 0) return cases;
 
-        // 3. Try Manual LocalStorage Backup
-        const backup = localStorage.getItem('cases_emergency_backup');
-        if (backup) {
-          try {
-            const parsed = JSON.parse(backup) as Case[];
-            inMemoryCache = parsed;
-            return parsed;
-          } catch {
-            return [];
-          }
-        }
-      } else {
-        console.error("Failed to load cases from Firestore", e);
-      }
-      return inMemoryCache || [];
+      const db = await getDB();
+      const localCases = await db.getAll(STORE_NAME);
+      if (localCases.length > 0) return localCases;
+
+      return initialCases;
+    } catch (e) {
+      console.error("Load failed, falling back to initial data", e);
+      return initialCases;
     }
   },
 
   addCase: async (newCase: Omit<Case, 'id' | 'createdAt'>): Promise<Case | null> => {
+    const id = crypto.randomUUID();
+    const createdAt = Date.now();
+    const caseWithId = { ...newCase, id, createdAt } as Case;
+    
     try {
-      const createdAt = Date.now();
-      
-      // Basic size check for Firestore document limit (approx 1MB)
-      const dataSize = JSON.stringify(newCase).length;
-      if (dataSize > 1000000) {
-        throw new Error("Case data is too large for Firestore (Over 1MB). Please reduce number of images or compress more.");
-      }
-
-      // Use addDoc for auto-generated unique IDs to prevent collisions
-      const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-        ...newCase,
-        createdAt: createdAt
-      });
-      
-      // Update with the generated ID as a field for UI consistency
-      await updateDoc(docRef, { id: docRef.id });
-      
-      return { ...newCase, id: docRef.id, createdAt } as Case;
-    } catch (e: any) {
-      console.error("Failed to save case to Firestore", e);
-      if (e.message && e.message.includes('Quota exceeded')) {
-        alert("Firestore quota reached. Changes cannot be saved today.");
-      }
-      handleFirestoreError(e, 'create', COLLECTION_NAME);
-      return null;
+      const db = await getDB();
+      await db.put(STORE_NAME, caseWithId);
+    } catch (e) {
+      console.error("Local save failed", e);
     }
-  },
 
-  upsertCase: async (updatedCase: Case): Promise<boolean> => {
     try {
-      // Ensure we have an ID for the doc reference
-      const finalId = updatedCase.id || Math.random().toString(36).substring(7);
-      const docData = { ...updatedCase, id: finalId };
-
-      const dataSize = JSON.stringify(docData).length;
-      if (dataSize > 1000000) {
-        console.warn(`Case ${finalId} is too large (${dataSize} bytes). skipping...`);
-        return false;
-      }
-
-      const docRef = doc(db, COLLECTION_NAME, finalId);
-      await setDoc(docRef, docData, { merge: true });
-      
-      // Invalidate cache
-      inMemoryCache = null;
-      lastFetchTime = 0;
-      
-      return true;
-    } catch (e: any) {
-      console.error("UPSERT FAIL:", e);
-      if (e.message && e.message.includes('Quota exceeded') || e.code === 'resource-exhausted') {
-         alert("Firebase Quota Exceeded for today. Data might not be saved properly. It will reset tomorrow.");
-      }
-      handleFirestoreError(e, 'write', `${COLLECTION_NAME}/${updatedCase.id || 'new'}`);
-      return false;
+      const cloudResult = await FirebaseCaseService.addCase(newCase);
+      if (cloudResult) return cloudResult;
+    } catch (e) {
+      console.error("Cloud save failed", e);
     }
+
+    return caseWithId;
   },
 
   updateCase: async (updatedCase: Case): Promise<boolean> => {
     try {
-      const dataSize = JSON.stringify(updatedCase).length;
-      if (dataSize > 1000000) {
-        throw new Error("Case data is too large for Firestore (Over 1MB).");
-      }
+      const db = await getDB();
+      await db.put(STORE_NAME, updatedCase);
+    } catch (e) {
+      console.error("Local update failed", e);
+    }
 
-      const docRef = doc(db, COLLECTION_NAME, updatedCase.id);
-      await updateDoc(docRef, { ...updatedCase });
+    try {
+      const { id, ...updates } = updatedCase;
+      await FirebaseCaseService.updateCase(id, updates);
       return true;
-    } catch (e: any) {
-      console.error("Failed to update case in Firestore", e);
-      if (e.message && e.message.includes('Quota exceeded')) {
-        alert("Firestore quota reached. Update failed.");
+    } catch (e) {
+      console.error("Firebase update failed", e);
+      return false;
+    }
+  },
+
+  importCases: async (cases: Case[]): Promise<boolean> => {
+    try {
+      const db = await getDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      for (const c of cases) {
+        await tx.store.put(c);
+        const { id, ...data } = c;
+        FirebaseCaseService.addCase(data).catch(() => {});
       }
-      handleFirestoreError(e, 'update', `${COLLECTION_NAME}/${updatedCase.id}`);
+      await tx.done;
+      return true;
+    } catch (e) {
+      console.error("Import failed", e);
       return false;
     }
   },
 
   deleteCase: async (id: string): Promise<void> => {
     try {
-      const docRef = doc(db, COLLECTION_NAME, id);
-      await deleteDoc(docRef);
+      const db = await getDB();
+      await db.delete(STORE_NAME, id);
     } catch (e) {
-      console.error("Failed to delete case from Firestore", e);
-      handleFirestoreError(e, 'delete', `${COLLECTION_NAME}/${id}`);
+      console.error("Local delete failed", e);
     }
+
+    await FirebaseCaseService.deleteCase(id);
+  },
+
+  syncAllToSupabase: async () => {
+    return CaseService.syncAllToFirebase();
   }
 };
+
+

@@ -2,30 +2,26 @@
   "entities": {
     "Case": {
       "title": "Clinical Case",
-      "description": "A medical/dental clinical case with documentation images",
+      "description": "A dental clinical case showcased in the portfolio.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "createdAt": { "type": "number", "description": "Timestamp in milliseconds" },
+        "createdAt": { "type": "number" },
         "title": { "type": "string" },
         "category": { 
           "type": "string",
           "enum": ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "Cosmetic Fillings"]
         },
         "description": { "type": "string" },
-        "images": { 
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Array of base64 compressed images"
-        }
+        "images": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["title", "category", "description", "images"]
+      "required": ["id", "createdAt", "title", "category", "description", "images"]
     }
   },
   "firestore": {
-    "cases/{caseId}": {
+    "cases": {
       "schema": "Case",
-      "description": "Collection of clinical cases"
+      "description": "Collection of clinical cases."
     }
   }
 }

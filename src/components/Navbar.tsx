@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { User, GraduationCap, Phone, Image as ImageIcon, Settings, Menu, X, Award } from 'lucide-react';
 import { useState } from 'react';
+import FirebaseStatus from './FirebaseStatus';
 
 const navItems = [
   { name: 'Home', href: '#home', icon: User },
@@ -21,7 +22,10 @@ export default function Navbar({ onAdminOpen }: { onAdminOpen: () => void }) {
             <div className="w-10 h-10 bg-gold rounded-xl flex items-center justify-center shadow-lg shadow-gold/20">
               <Award className="text-black w-6 h-6" />
             </div>
-            <span className="font-serif font-bold text-2xl text-white tracking-tight">Sami Ali</span>
+            <div className="flex flex-col">
+              <span className="font-serif font-bold text-2xl text-white tracking-tight leading-none">Sami Ali</span>
+              <FirebaseStatus />
+            </div>
           </div>
           
           {/* Desktop Nav */}
