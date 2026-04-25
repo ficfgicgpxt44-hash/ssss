@@ -11,7 +11,6 @@ import {
 } from 'firebase/firestore';
 import { getFirebase } from '../lib/firebase';
 import { Case } from '../types';
-import { StorageService } from './StorageService';
 
 enum OperationType {
   CREATE = 'create',
@@ -90,21 +89,11 @@ export const FirebaseCaseService = {
 
     const id = crypto.randomUUID();
     const createdAt = Date.now();
-    const caseData = { ...newCase, id, createdAt } as Case;
+    const caseData = { ...newCase, id, createdAt };
 
     try {
-      // Upload case JSON to Cloud Storage
-      console.log(`[v0] Uploading case JSON for ${id}`);
-      try {
-        await StorageService.exportCaseAsJson(caseData);
-        console.log(`[v0] Case JSON uploaded successfully`);
-      } catch (storageError) {
-        console.warn('[v0] Cloud Storage upload failed, but continuing with Firestore:', storageError);
-      }
-
-      // Save to Firestore
       await setDoc(doc(db, 'cases', id), caseData);
-      return caseData;
+      return caseData as Case;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `cases/${id}`);
       return null;
@@ -116,25 +105,7 @@ export const FirebaseCaseService = {
     if (!db) return;
 
     try {
-      // First update Firestore
       await updateDoc(doc(db, 'cases', id), updates);
-
-      // Then upload updated case JSON to Cloud Storage
-      // Fetch the complete updated case
-      try {
-        const q = query(collection(db, 'cases'));
-        const snapshot = await getDocs(q);
-        const updatedCaseDoc = snapshot.docs.find(d => d.id === id);
-        
-        if (updatedCaseDoc) {
-          const updatedCase = { ...updatedCaseDoc.data(), id } as Case;
-          console.log(`[v0] Uploading updated case JSON for ${id}`);
-          await StorageService.exportCaseAsJson(updatedCase);
-          console.log(`[v0] Updated case JSON uploaded to Cloud Storage`);
-        }
-      } catch (storageError) {
-        console.warn('[v0] Cloud Storage update failed, but Firestore was updated:', storageError);
-      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `cases/${id}`);
     }
@@ -145,18 +116,7 @@ export const FirebaseCaseService = {
     if (!db) return;
 
     try {
-      // Delete from Cloud Storage first
-      try {
-        console.log(`[v0] Deleting case from Cloud Storage: ${id}`);
-        await StorageService.deleteCase(id);
-        console.log(`[v0] Case deleted from Cloud Storage`);
-      } catch (storageError) {
-        console.warn('[v0] Cloud Storage deletion failed, continuing with Firestore:', storageError);
-      }
-
-      // Delete from Firestore
       await deleteDoc(doc(db, 'cases', id));
-      console.log(`[v0] Case deleted from Firestore and Cloud Storage`);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `cases/${id}`);
     }
