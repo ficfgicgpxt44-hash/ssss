@@ -144,16 +144,16 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     try {
       const result = await CaseService.syncAllToFirebase();
       if (result.success) {
-        alert(`Successfully synced ${result.count} cases to cloud with Cloud Storage images.`);
+        alert(`Successfully synced ${result.count} cases to cloud.`);
         const freshData = await CaseService.getCases();
         setCases(freshData);
       } else {
-        console.error("[v0] Sync error details:", result.error);
-        alert(`Sync failed: ${result.error?.message || 'Unknown error'}. Make sure your Firebase Firestore collection 'cases' exists and Cloud Storage is enabled.`);
+        console.error("Sync error details:", result.error);
+        alert(`Sync failed: ${result.error?.message || 'Unknown error'}. Make sure your Firebase Firestore collection 'cases' exists and rules are deployed.`);
       }
     } catch (err) {
-      console.error("[v0] Sync error:", err);
-      alert("Failed to sync cases. Check that Firebase is properly configured with Cloud Storage.");
+      console.error("Sync error:", err);
+      alert("Failed to sync cases.");
     } finally {
       setIsSyncing(false);
     }
@@ -249,12 +249,15 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.images.length === 0) return;
+    
+    // Check approximate size for Firestore 1MB limit
+    const totalSize = JSON.stringify(formData).length;
+    if (totalSize > 900000) {
+      alert("Case data is too large for cloud storage. Please reduce the number of images or their size.");
+      return;
+    }
 
     try {
-      // Show uploading status
-      const uploadingMessage = "Uploading images to cloud storage...";
-      setIsAdding(false); // Show loading state by disabling form
-      
       if (editingCase) {
         await CaseService.updateCase({ ...formData, id: editingCase.id, createdAt: editingCase.createdAt });
       } else {
@@ -265,16 +268,15 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       setIsAdding(false);
       setEditingCase(null);
       setFormData({ title: '', category: 'Prosthodontics', description: '', images: [] });
-      alert("Case saved successfully!");
     } catch (error: any) {
-      console.error("[v0] Save error:", error);
+      console.error("Save error:", error);
       let message = "Failed to save case.";
       try {
          const errInfo = JSON.parse(error.message);
          if (errInfo.error.includes("insufficient permissions")) {
            message = "Permission denied. Please ensure you are logged in as the admin.";
          } else if (errInfo.error.includes("too large")) {
-           message = "Data too large for cloud storage. Reduce the number of images.";
+           message = "Data too large for Firestore. Reduce images.";
          } else {
            message = `Cloud Error: ${errInfo.error}`;
          }

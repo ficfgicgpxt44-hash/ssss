@@ -40,24 +40,23 @@ export const CaseService = {
   },
 
   addCase: async (newCase: Omit<Case, 'id' | 'createdAt'>): Promise<Case | null> => {
+    const id = crypto.randomUUID();
+    const createdAt = Date.now();
+    const caseWithId = { ...newCase, id, createdAt } as Case;
+    
     try {
-      // First try to save to Firebase (with image uploads to Cloud Storage)
-      const firebaseCase = await FirebaseCaseService.addCase(newCase);
-      
-      if (firebaseCase) {
-        // Then save to local IndexedDB for offline access
-        try {
-          const db = await getDB();
-          await db.put(STORE_NAME, firebaseCase);
-        } catch (e) {
-          console.error("[v0] Local save failed after successful cloud save", e);
-        }
-        return firebaseCase;
-      }
-      
-      throw new Error("Failed to save to Firebase");
+      const db = await getDB();
+      await db.put(STORE_NAME, caseWithId);
     } catch (e) {
-      console.error("[v0] Cloud save failed", e);
+      console.error("Local save failed", e);
+    }
+
+    try {
+      const { id: cid, ...data } = caseWithId;
+      await FirebaseCaseService.addCaseWithId(caseWithId.id, data);
+      return caseWithId;
+    } catch (e) {
+      console.error("Cloud save failed", e);
       throw e; // Propagate the error so the UI can show it
     }
   },
