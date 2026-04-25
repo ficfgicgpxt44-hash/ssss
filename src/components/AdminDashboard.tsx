@@ -351,32 +351,87 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
             <form onSubmit={handleSaveProfile} className="space-y-8 bg-card p-10 rounded-[3rem] border border-white/5">
               <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-white/30 uppercase tracking-widest">Full Name</label>
-                  <input 
-                    value={cvData.name}
-                    onChange={e => setCvData({...cvData, name: e.target.value})}
-                    className="w-full bg-dark/50 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-white/30 uppercase tracking-widest">Professional Title</label>
-                  <input 
-                    value={cvData.title}
-                    onChange={e => setCvData({...cvData, title: e.target.value})}
-                    className="w-full bg-dark/50 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all"
-                  />
-                </div>
-              </div>
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-white/30 uppercase tracking-widest">Profile Image</label>
+                    <div className="flex items-center gap-6">
+                      <div className="w-32 h-32 rounded-3xl bg-dark/50 border border-white/10 overflow-hidden flex-shrink-0">
+                        {cvData.profileImage ? (
+                          <img src={cvData.profileImage} className="w-full h-full object-cover" alt="Profile" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-white/10">
+                            <UserIcon className="w-12 h-12" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-grow space-y-3">
+                        <div className="flex gap-3">
+                          <label className="inline-block px-6 py-3 bg-white/5 border border-white/10 rounded-xl font-bold text-white cursor-pointer hover:border-gold transition-all text-sm">
+                            Upload Photo
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              accept="image/*"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onload = async () => {
+                                    const result = reader.result as string;
+                                    const compressedDataUrl = await compressImage(result);
+                                    if (compressedDataUrl) {
+                                      setCvData({...cvData, profileImage: compressedDataUrl});
+                                    }
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                          {cvData.profileImage && (
+                            <button 
+                              type="button"
+                              onClick={() => setCvData({...cvData, profileImage: ''})}
+                              className="px-6 py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl font-bold hover:bg-red-500 hover:text-white transition-all text-sm"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-white/20">Recommended: Square aspect ratio (1:1)</p>
+                      </div>
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-white/30 uppercase tracking-widest">Profile Summary</label>
-                <textarea 
-                  value={cvData.summary}
-                  onChange={e => setCvData({...cvData, summary: e.target.value})}
-                  rows={4}
-                  className="w-full bg-dark/50 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all resize-none"
-                />
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/30 uppercase tracking-widest">Full Name</label>
+                    <input 
+                      value={cvData.name}
+                      onChange={e => setCvData({...cvData, name: e.target.value})}
+                      className="w-full bg-dark/50 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-8">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/30 uppercase tracking-widest">Professional Title</label>
+                    <input 
+                      value={cvData.title}
+                      onChange={e => setCvData({...cvData, title: e.target.value})}
+                      className="w-full bg-dark/50 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/30 uppercase tracking-widest">Profile Summary</label>
+                    <textarea 
+                      value={cvData.summary}
+                      onChange={e => setCvData({...cvData, summary: e.target.value})}
+                      rows={6}
+                      className="w-full bg-dark/50 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all resize-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="pt-6 border-t border-white/5">

@@ -24,4 +24,5 @@ export interface CVData {
   }[];
   skills: string[];
   languages: string[];
+  profileImage?: string;
 }

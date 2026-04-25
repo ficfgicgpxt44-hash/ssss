@@ -64,7 +64,8 @@ service cloud.firestore {
              data.name is string && data.name.size() <= 128 &&
              data.title is string && data.title.size() <= 128 &&
              data.summary is string && data.summary.size() <= 2000 &&
-             data.ownerId == request.auth.uid;
+             data.ownerId == request.auth.uid &&
+             (!data.keys().contains('profileImage') || (data.profileImage is string && data.profileImage.size() <= 800000));
     }
 
     // --- COLLECTIONS ---

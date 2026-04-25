@@ -1,7 +1,37 @@
 import { motion } from 'motion/react';
 import { Award } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { query, collection, getDocs, limit } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { CVData } from '../types';
 
 export default function Hero() {
+  const [cvData, setCvData] = useState<CVData>({
+    name: 'Sami Ali',
+    title: 'General Dentist',
+    summary: 'A motivated 2024 Dentistry graduate with a strong work ethic and an innate ability to learn new techniques quickly. I bring a unique, patient-centered approach to every procedure, combining precision with compassionate care. As a dedicated and adaptable team player, I’m eager to apply my skills and innovative mindset to help improve patient outcomes and contribute positively to a dental practice.',
+    education: [],
+    experience: [],
+    skills: [],
+    languages: []
+  });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const q = query(collection(db, 'cv'), limit(1));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const data = querySnapshot.docs[0].data() as CVData;
+          setCvData(prev => ({...prev, ...data}));
+        }
+      } catch (err) {
+        console.error("Failed to fetch hero data:", err);
+      }
+    };
+    fetchData();
+  }, []);
+
   return (
     <section id="home" className="relative pt-32 pb-16 px-6 lg:px-8 max-w-7xl mx-auto overflow-hidden" dir="ltr">
       {/* Background Decorative Elements */}
@@ -22,16 +52,16 @@ export default function Hero() {
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/10 text-gold text-[10px] font-extrabold uppercase tracking-[0.3em] mb-8 border border-gold/20 backdrop-blur-sm"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
-            General Dentist
+            {cvData.title}
           </motion.div>
           
           <h1 className="text-6xl md:text-7xl lg:text-8xl font-serif text-white leading-[1.1] mb-8">
-             <span className="text-gradient">Sami Ali</span> <br/>
-             <span className="text-white/20 text-3xl md:text-4xl lg:text-5xl font-light italic">General Dentist</span>
+            <span className="text-gradient leading-tight block">{cvData.name}</span>
+            <span className="text-white/20 text-3xl md:text-4xl lg:text-5xl font-light italic">{cvData.title}</span>
           </h1>
           
-          <p className="text-lg md:text-xl text-white/40 mb-10 leading-relaxed max-w-xl mx-auto lg:mx-0 font-light">
-            A motivated 2024 Dentistry graduate with a strong work ethic and an innate ability to learn new techniques quickly. I bring a unique, patient-centered approach to every procedure, combining precision with compassionate care. As a dedicated and adaptable team player, I’m eager to apply my skills and innovative mindset to help improve patient outcomes and contribute positively to a dental practice.
+          <p className="text-lg md:text-xl text-white/40 mb-10 leading-relaxed max-w-xl mx-auto lg:mx-0 font-light whitespace-pre-wrap">
+            {cvData.summary}
           </p>
           
           <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-6">
@@ -62,8 +92,8 @@ export default function Hero() {
           <div className="relative aspect-[4/5] rounded-[3.5rem] overflow-hidden bg-card border-4 border-surface shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] glow-gold group">
             <div className="w-full h-full overflow-hidden">
                <img 
-                src="/sami_profile.png" 
-                alt="Sami Ali" 
+                src={cvData.profileImage || "/sami_profile.png"} 
+                alt={cvData.name} 
                 className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=1000&auto=format&fit=crop";

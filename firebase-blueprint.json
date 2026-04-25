@@ -60,6 +60,7 @@
         },
         "skills": { "type": "array", "items": { "type": "string" } },
         "languages": { "type": "array", "items": { "type": "string" } },
+        "profileImage": { "type": "string", "description": "Base64 encoded profile image" },
         "ownerId": { "type": "string" }
       },
       "required": ["name", "title", "summary", "ownerId"]
