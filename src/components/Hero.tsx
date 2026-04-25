@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Award } from 'lucide-react';
+import { Award, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { query, collection, getDocs, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -90,15 +90,22 @@ export default function Hero() {
           <div className="absolute inset-0 border border-white/5 rounded-[4rem] scale-105 animate-[spin_15s_linear_infinite_reverse] pointer-events-none" />
 
           <div className="relative aspect-[4/5] rounded-[3.5rem] overflow-hidden bg-card border-4 border-surface shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] glow-gold group">
-            <div className="w-full h-full overflow-hidden">
-               <img 
-                src={cvData.profileImage || "/sami_profile.png"} 
-                alt={cvData.name} 
-                className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=1000&auto=format&fit=crop";
-                }}
-              />
+            <div className="w-full h-full overflow-hidden flex items-center justify-center bg-dark/20">
+               {cvData.profileImage ? (
+                 <img 
+                  src={cvData.profileImage} 
+                  alt={cvData.name} 
+                  className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=1000&auto=format&fit=crop";
+                  }}
+                />
+               ) : (
+                 <div className="flex flex-col items-center gap-4 text-white/5">
+                   <User className="w-32 h-32 stroke-[1]" />
+                   <span className="text-[10px] font-bold uppercase tracking-[0.2em]">No Profile Image</span>
+                 </div>
+               )}
             </div>
             
             {/* Overlay Info */}
