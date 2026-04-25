@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download, RefreshCw, Cloud, WifiOff, LogIn, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download, RefreshCw, Cloud, WifiOff, LogIn } from 'lucide-react';
 import { openDB } from 'idb';
 import heic2any from 'heic2any';
 import { Case } from '../types';
 import { CaseService } from '../services/CaseService';
-import { getFirebase, googleProvider } from '../lib/firebase';
-import { signInWithPopup, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import AdminStatusManager from './AdminStatusManager';
+
+type FirebaseUser = {
+  uid: string;
+  email: string | null;
+};
 
 const categories = ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "Cosmetic Fillings"];
 const ADMIN_EMAIL = 'ficfgicgpxt44@gmail.com';
@@ -34,57 +38,33 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationProgress, setOptimizationProgress] = useState(0);
 
-  const handleLogin = async () => {
-    const { auth } = getFirebase();
-    if (!auth) return;
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const storedPass = localStorage.getItem('admin_password') || 'admin123';
+    const inputPass = (e.currentTarget as any).password.value;
 
-    try {
+    if (inputPass === storedPass) {
+      setIsAuthenticated(true);
       setLoginError(null);
-      const result = await signInWithPopup(auth, googleProvider);
-      if (result.user.email !== ADMIN_EMAIL) {
-        await signOut(auth);
-        setLoginError("Unauthorized: Only the project owner can access this area.");
-      }
-    } catch (err: any) {
-      console.error("Login Error:", err);
-      setLoginError(err.message || "Failed to sign in with Google.");
+    } else {
+      setLoginError("Invalid password. Default is 'admin123'");
     }
   };
 
   const handleLogout = async () => {
-    const { auth } = getFirebase();
-    if (auth) {
-      await signOut(auth);
-      onClose();
-    }
+    setIsAuthenticated(false);
+    onClose();
   };
 
   useEffect(() => {
-    const { auth } = getFirebase();
-    if (!auth) {
-      setIsAuthenticating(false);
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser && firebaseUser.email === ADMIN_EMAIL) {
-        setUser(firebaseUser);
-        setIsAuthenticated(true);
-      } else {
-        setUser(null);
-        setIsAuthenticated(false);
-      }
-      setIsAuthenticating(false);
-    });
-
-    return () => unsubscribe();
+    // No initialization needed for local auth
+    setIsAuthenticating(false);
   }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
       const fetchCases = async () => {
-        const { app } = getFirebase();
-        setIsCloudConnected(!!app);
+        setIsCloudConnected(false); // Cloud is disconnected
         
         const data = await CaseService.getCases();
         setCases(data);
@@ -95,8 +75,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   if (isAuthenticating) {
     return (
-      <div className="fixed inset-0 z-[300] bg-dark flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-gold animate-spin" />
+      <div className="fixed inset-0 z-[300] bg-dark/95 flex items-center justify-center">
+        <div className="text-white font-serif text-xl animate-pulse">Initializing Security...</div>
       </div>
     );
   }
@@ -113,15 +93,22 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             <LayoutDashboard className="w-10 h-10" />
           </div>
           <h2 className="text-3xl font-serif text-white mb-2">Admin Access</h2>
-          <p className="text-white/40 mb-8 font-light">Secure sign-in for portfolio management</p>
+          <p className="text-white/40 mb-8 font-light">Enter password to manage portfolio</p>
           
-          <div className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
+            <input 
+              name="password"
+              type="password"
+              placeholder="Enter Admin Password"
+              className="w-full bg-dark/50 border border-white/10 rounded-2xl p-5 text-white focus:border-gold transition-all text-center text-lg"
+              autoFocus
+            />
             <button 
-              onClick={handleLogin}
+              type="submit"
               className="w-full bg-white text-dark py-5 rounded-2xl font-bold text-lg hover:bg-gray-100 transition-all flex items-center justify-center gap-3 shadow-xl"
             >
               <LogIn className="w-6 h-6" />
-              Sign in with Google
+              Sign In
             </button>
             {loginError && <p className="text-red-500 text-sm mt-4 px-4 font-bold">{loginError}</p>}
             <button 
@@ -131,7 +118,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             >
               Cancel
             </button>
-          </div>
+          </form>
         </motion.div>
       </div>
     );
@@ -142,14 +129,14 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      const result = await CaseService.syncAllToFirebase();
+      const result = await CaseService.syncAllToSupabase();
       if (result.success) {
         alert(`Successfully synced ${result.count} cases to cloud.`);
         const freshData = await CaseService.getCases();
         setCases(freshData);
       } else {
         console.error("Sync error details:", result.error);
-        alert(`Sync failed: ${result.error?.message || 'Unknown error'}. Make sure your Firebase Firestore collection 'cases' exists and rules are deployed.`);
+        alert(`Sync failed: ${result.error?.message || 'Unknown error'}. Make sure your Supabase table 'cases' exists.`);
       }
     } catch (err) {
       console.error("Sync error:", err);
@@ -250,13 +237,6 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     if (formData.images.length === 0) return;
     
-    // Check approximate size for Firestore 1MB limit
-    const totalSize = JSON.stringify(formData).length;
-    if (totalSize > 900000) {
-      alert("Case data is too large for cloud storage. Please reduce the number of images or their size.");
-      return;
-    }
-
     try {
       if (editingCase) {
         await CaseService.updateCase({ ...formData, id: editingCase.id, createdAt: editingCase.createdAt });
@@ -268,22 +248,9 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       setIsAdding(false);
       setEditingCase(null);
       setFormData({ title: '', category: 'Prosthodontics', description: '', images: [] });
-    } catch (error: any) {
+    } catch (error) {
       console.error("Save error:", error);
-      let message = "Failed to save case.";
-      try {
-         const errInfo = JSON.parse(error.message);
-         if (errInfo.error.includes("insufficient permissions")) {
-           message = "Permission denied. Please ensure you are logged in as the admin.";
-         } else if (errInfo.error.includes("too large")) {
-           message = "Data too large for Firestore. Reduce images.";
-         } else {
-           message = `Cloud Error: ${errInfo.error}`;
-         }
-      } catch {
-         message = error.message || "Unknown error occurred.";
-      }
-      alert(message);
+      alert("Failed to save case. Please check if images are too large.");
     }
   };
 
@@ -529,6 +496,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
             ))}
           </AnimatePresence>
         </div>
+
+        <AdminStatusManager />
       </main>
 
       {/* Editor Modal */}
@@ -588,8 +557,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                   <label className="text-xs font-bold text-white/30 uppercase tracking-widest italic">Case Images (Up to 20)</label>
-                   <span className="text-xs text-gold">{formData.images.length} / 20</span>
+                   <label className="text-xs font-bold text-white/30 uppercase tracking-widest italic">Case Images (Up to 30)</label>
+                   <span className="text-xs text-gold">{formData.images.length} / 30</span>
                 </div>
                 
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-4">
@@ -618,7 +587,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
                     ))}
                   </AnimatePresence>
                   
-                  {formData.images.length < 20 && (
+                  {formData.images.length < 30 && (
                     <label className="aspect-square bg-dark/50 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-gold/50 transition-all">
                       <Plus className="w-8 h-8 text-white/20 mb-1" />
                       <span className="text-[10px] text-white/30">Add Images</span>
@@ -629,7 +598,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
                         className="hidden"
                         onChange={async (e) => {
                           const files = Array.from(e.target.files || []);
-                          const remaining = 20 - formData.images.length;
+                          const remaining = 30 - formData.images.length;
                           const toProcess = files.slice(0, remaining);
                           
                           if (toProcess.length === 0) return;

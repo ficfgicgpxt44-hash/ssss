@@ -25,9 +25,6 @@ const getDB = () => {
 export const CaseService = {
   getCases: async (): Promise<Case[]> => {
     try {
-      const firebaseCases = await FirebaseCaseService.getCases();
-      if (firebaseCases.length > 0) return firebaseCases;
-
       const db = await getDB();
       const localCases = await db.getAll(STORE_NAME);
       if (localCases.length > 0) return localCases;
@@ -47,17 +44,10 @@ export const CaseService = {
     try {
       const db = await getDB();
       await db.put(STORE_NAME, caseWithId);
-    } catch (e) {
-      console.error("Local save failed", e);
-    }
-
-    try {
-      const { id: cid, ...data } = caseWithId;
-      await FirebaseCaseService.addCaseWithId(caseWithId.id, data);
       return caseWithId;
     } catch (e) {
-      console.error("Cloud save failed", e);
-      throw e; // Propagate the error so the UI can show it
+      console.error("Local save failed", e);
+      return null;
     }
   },
 
@@ -65,17 +55,10 @@ export const CaseService = {
     try {
       const db = await getDB();
       await db.put(STORE_NAME, updatedCase);
-    } catch (e) {
-      console.error("Local update failed", e);
-    }
-
-    try {
-      const { id, ...updates } = updatedCase;
-      await FirebaseCaseService.updateCase(id, updates);
       return true;
     } catch (e) {
-      console.error("Firebase update failed", e);
-      throw e; // Propagate the error
+      console.error("Local update failed", e);
+      return false;
     }
   },
 
@@ -85,8 +68,6 @@ export const CaseService = {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       for (const c of cases) {
         await tx.store.put(c);
-        const { id, ...data } = c;
-        FirebaseCaseService.addCaseWithId(id, data).catch(() => {});
       }
       await tx.done;
       return true;
@@ -103,27 +84,10 @@ export const CaseService = {
     } catch (e) {
       console.error("Local delete failed", e);
     }
-
-    await FirebaseCaseService.deleteCase(id);
   },
-
-  syncAllToFirebase: async (): Promise<{ success: boolean; count: number; error?: any }> => {
-    try {
-      const db = await getDB();
-      const localCases = await db.getAll(STORE_NAME);
-      
-      if (localCases.length === 0) return { success: true, count: 0 };
-      
-      for (const c of localCases) {
-        const { id, ...data } = c;
-        await FirebaseCaseService.addCaseWithId(id, data);
-      }
-      
-      return { success: true, count: localCases.length };
-    } catch (e) {
-      return { success: false, count: 0, error: e };
-    }
-  },
+  syncAllToSupabase: async (): Promise<{ success: boolean, count?: number, error?: any }> => {
+    return { success: false, error: { message: "Cloud sync not configured" } };
+  }
 };
 
 
