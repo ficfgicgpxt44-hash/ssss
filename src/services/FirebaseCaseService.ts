@@ -21,16 +21,26 @@ enum OperationType {
   WRITE = 'write',
 }
 
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+  }
+}
+
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const { auth } = getFirebase();
-  const errInfo = {
+  const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
-    operationType,
-    path,
     authInfo: {
-      userId: auth?.currentUser?.uid,
-      email: auth?.currentUser?.email,
-    }
+      userId: auth?.currentUser?.uid || null,
+      email: auth?.currentUser?.email || null,
+    },
+    operationType,
+    path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
@@ -45,9 +55,31 @@ export const FirebaseCaseService = {
       const q = query(collection(db, 'cases'), orderBy('createdAt', 'desc'));
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Case[];
-    } catch (error) {
+    } catch (error: any) {
+      // If index is missing, fallback to unsorted and sort in memory
+      if (error.message && error.message.includes('requires an index')) {
+        try {
+          const snapshot = await getDocs(collection(db, 'cases'));
+          const docs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Case[];
+          return docs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        } catch (innerError) {
+          handleFirestoreError(innerError, OperationType.LIST, 'cases');
+          return [];
+        }
+      }
       handleFirestoreError(error, OperationType.LIST, 'cases');
       return [];
+    }
+  },
+
+  async addCaseWithId(id: string, data: Omit<Case, 'id'>): Promise<void> {
+    const { db } = getFirebase();
+    if (!db) throw new Error("Firebase not initialized");
+
+    try {
+      await setDoc(doc(db, 'cases', id), { ...data, id });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `cases/${id}`);
     }
   },
 

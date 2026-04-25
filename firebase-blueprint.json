@@ -2,26 +2,23 @@
   "entities": {
     "Case": {
       "title": "Clinical Case",
-      "description": "A dental clinical case showcased in the portfolio.",
+      "description": "Details about a dental clinical case",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "createdAt": { "type": "number" },
-        "title": { "type": "string" },
-        "category": { 
-          "type": "string",
-          "enum": ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "Cosmetic Fillings"]
-        },
-        "description": { "type": "string" },
-        "images": { "type": "array", "items": { "type": "string" } }
+        "id": { "type": "string", "description": "Unique identifier (UUID)" },
+        "title": { "type": "string", "description": "Title of the case" },
+        "category": { "type": "string", "description": "Medical category" },
+        "description": { "type": "string", "description": "Detailed description" },
+        "images": { "type": "array", "items": { "type": "string" }, "description": "List of base64 image strings" },
+        "createdAt": { "type": "number", "description": "Timestamp of creation" }
       },
-      "required": ["id", "createdAt", "title", "category", "description", "images"]
+      "required": ["id", "title", "category", "images", "createdAt"]
     }
   },
   "firestore": {
     "cases": {
       "schema": "Case",
-      "description": "Collection of clinical cases."
+      "description": "Public collection of dental portfolio cases"
     }
   }
 }

@@ -23,32 +23,10 @@ const getDB = () => {
 };
 
 export const CaseService = {
-  migrateLocalToFirebase: async (): Promise<void> => {
-    localStorage.setItem('firebase_migrated', 'true');
-  },
-
-  syncAllToFirebase: async (): Promise<{ success: boolean; count: number; error?: any }> => {
-    try {
-      const db = await getDB();
-      const localCases = await db.getAll(STORE_NAME);
-      
-      if (localCases.length === 0) return { success: true, count: 0 };
-      
-      for (const c of localCases) {
-        const { id, ...data } = c;
-        await FirebaseCaseService.addCase(data);
-      }
-      
-      return { success: true, count: localCases.length };
-    } catch (e) {
-      return { success: false, count: 0, error: e };
-    }
-  },
-
   getCases: async (): Promise<Case[]> => {
     try {
-      const cases = await FirebaseCaseService.getCases();
-      if (cases.length > 0) return cases;
+      const firebaseCases = await FirebaseCaseService.getCases();
+      if (firebaseCases.length > 0) return firebaseCases;
 
       const db = await getDB();
       const localCases = await db.getAll(STORE_NAME);
@@ -74,13 +52,13 @@ export const CaseService = {
     }
 
     try {
-      const cloudResult = await FirebaseCaseService.addCase(newCase);
-      if (cloudResult) return cloudResult;
+      const { id: cid, ...data } = caseWithId;
+      await FirebaseCaseService.addCaseWithId(caseWithId.id, data);
+      return caseWithId;
     } catch (e) {
       console.error("Cloud save failed", e);
+      throw e; // Propagate the error so the UI can show it
     }
-
-    return caseWithId;
   },
 
   updateCase: async (updatedCase: Case): Promise<boolean> => {
@@ -97,7 +75,7 @@ export const CaseService = {
       return true;
     } catch (e) {
       console.error("Firebase update failed", e);
-      return false;
+      throw e; // Propagate the error
     }
   },
 
@@ -108,7 +86,7 @@ export const CaseService = {
       for (const c of cases) {
         await tx.store.put(c);
         const { id, ...data } = c;
-        FirebaseCaseService.addCase(data).catch(() => {});
+        FirebaseCaseService.addCaseWithId(id, data).catch(() => {});
       }
       await tx.done;
       return true;
@@ -129,9 +107,23 @@ export const CaseService = {
     await FirebaseCaseService.deleteCase(id);
   },
 
-  syncAllToSupabase: async () => {
-    return CaseService.syncAllToFirebase();
-  }
+  syncAllToFirebase: async (): Promise<{ success: boolean; count: number; error?: any }> => {
+    try {
+      const db = await getDB();
+      const localCases = await db.getAll(STORE_NAME);
+      
+      if (localCases.length === 0) return { success: true, count: 0 };
+      
+      for (const c of localCases) {
+        const { id, ...data } = c;
+        await FirebaseCaseService.addCaseWithId(id, data);
+      }
+      
+      return { success: true, count: localCases.length };
+    } catch (e) {
+      return { success: false, count: 0, error: e };
+    }
+  },
 };
 
 
