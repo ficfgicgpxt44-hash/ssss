@@ -4,7 +4,6 @@
  */
 
 import Navbar from './components/Navbar';
-import StatusSection from './components/StatusSection';
 import Hero from './components/Hero';
 import CV from './components/CV';
 import Gallery from './components/Gallery';
@@ -70,7 +69,6 @@ export default function App() {
   return (
     <div className={`min-h-screen bg-dark font-sans overflow-x-hidden transition-all duration-500 ${isProtected ? 'blur-2xl grayscale' : ''}`}>
       <Navbar onAdminOpen={() => setIsAdminOpen(true)} />
-      <StatusSection />
       <main>
         <Hero />
         <CV />

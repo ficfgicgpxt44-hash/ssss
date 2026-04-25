@@ -25,10 +25,3 @@ export interface CVData {
   skills: string[];
   languages: string[];
 }
-
-export interface Status {
-  id: string;
-  image: string;
-  caption: string;
-  timestamp: number;
-}

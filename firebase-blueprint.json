@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "viewer"] }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Case": {
+      "title": "Case",
+      "description": "Clinical dental case",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "Cosmetic Fillings"] },
+        "description": { "type": "string" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["id", "createdAt", "title", "category", "description", "images", "ownerId"]
+    },
+    "CVData": {
+      "title": "CVData",
+      "description": "Professional dental CV",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "education": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "degree": { "type": "string" },
+              "institution": { "type": "string" },
+              "year": { "type": "string" }
+            }
+          }
+        },
+        "experience": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": { "type": "string" },
+              "clinic": { "type": "string" },
+              "period": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "languages": { "type": "array", "items": { "type": "string" } },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["name", "title", "summary", "ownerId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/cases/{caseId}": {
+      "schema": "Case",
+      "description": "Clinical cases collection"
+    },
+    "/cv/{userId}": {
+      "schema": "CVData",
+      "description": "CV data for each user (likely only one)"
+    }
+  }
+}

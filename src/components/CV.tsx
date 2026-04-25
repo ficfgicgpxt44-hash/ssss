@@ -1,12 +1,20 @@
 import { motion } from 'motion/react';
 import { GraduationCap, Briefcase, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { query, collection, getDocs, limit } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { CVData } from '../types';
 
-const education = [
+const defaultEducation = [
+// ...
+// (education data)
   { degree: 'Bachelor of Oral and Dental Medicine', institution: 'Delta University', year: '2019 - 2024' },
   { degree: 'Honor Degree (Very Good)', institution: 'Academic Distinction', year: '2024' },
 ];
 
-const experience = [
+const defaultExperience = [
+// ...
+// (experience data)
   { 
     role: 'First Operator', 
     clinic: 'Shenawi Dental Clinic', 
@@ -39,7 +47,7 @@ const experience = [
   },
 ];
 
-const specializedSkills = [
+const defaultSkills = [
   'High Endodontic Skills',
   'Magnification User (8x Loupes & 3.5x)',
   'Photo Editing & Video Creator',
@@ -52,7 +60,7 @@ const specializedSkills = [
   'Communication Skills',
 ];
 
-const courses = [
+const defaultCourses = [
   { name: 'Mastering Basic & Advanced Endodontics Program', details: '60 Credit Hours' },
   { name: 'Digital Dentistry Program (Basic & Advanced Exocad Mastering)', details: 'Digital Workflow' },
   { name: 'Dental Aesthetics Program', details: '90 Credit Hours' },
@@ -60,6 +68,28 @@ const courses = [
 ];
 
 export default function CV() {
+  const [data, setData] = useState<CVData | null>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const q = query(collection(db, 'cv'), limit(1));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          setData(querySnapshot.docs[0].data() as CVData);
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile:", err);
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  const education = data?.education && data.education.length > 0 ? data.education : defaultEducation;
+  const experience = data?.experience && data.experience.length > 0 ? data.experience : defaultExperience;
+  const specializedSkills = data?.skills && data.skills.length > 0 ? data.skills : defaultSkills;
+  const courses = defaultCourses; 
+
   return (
     <section id="cv" className="py-32 bg-surface px-6 sm:px-6 lg:px-8 border-y border-white/5 relative overflow-hidden" dir="ltr">
       {/* Background Decor */}

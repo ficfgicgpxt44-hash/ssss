@@ -1,93 +1,81 @@
-import { initialCases } from '../data/initialData';
-import { FirebaseCaseService } from './FirebaseCaseService';
-import { openDB, IDBPDatabase } from 'idb';
+import { 
+  collection, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  query, 
+  orderBy,
+  serverTimestamp,
+  Timestamp 
+} from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth } from '../lib/firebase';
 import { Case } from '../types';
 
-const DB_NAME = 'dentist_portfolio_v2';
-const STORE_NAME = 'cases';
-const DB_VERSION = 1;
-
-let dbPromise: Promise<IDBPDatabase<any>> | null = null;
-
-const getDB = () => {
-  if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        }
-      },
-    });
-  }
-  return dbPromise;
-};
+const COLLECTION_NAME = 'cases';
 
 export const CaseService = {
   getCases: async (): Promise<Case[]> => {
     try {
-      const db = await getDB();
-      const localCases = await db.getAll(STORE_NAME);
-      if (localCases.length > 0) return localCases;
-
-      return initialCases;
+      const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          ...data,
+          id: doc.id,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : data.createdAt
+        } as Case;
+      });
     } catch (e) {
-      console.error("Load failed, falling back to initial data", e);
-      return initialCases;
+      return handleFirestoreError(e, OperationType.GET, COLLECTION_NAME);
     }
   },
 
   addCase: async (newCase: Omit<Case, 'id' | 'createdAt'>): Promise<Case | null> => {
-    const id = crypto.randomUUID();
-    const createdAt = Date.now();
-    const caseWithId = { ...newCase, id, createdAt } as Case;
-    
     try {
-      const db = await getDB();
-      await db.put(STORE_NAME, caseWithId);
-      return caseWithId;
+      const user = auth.currentUser;
+      if (!user) throw new Error('Must be logged in to add cases');
+
+      const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+        ...newCase,
+        ownerId: user.uid,
+        createdAt: serverTimestamp(),
+      });
+
+      return {
+        ...newCase,
+        id: docRef.id,
+        createdAt: Date.now(), // Optimistic return
+        ownerId: user.uid
+      } as Case;
     } catch (e) {
-      console.error("Local save failed", e);
-      return null;
+      return handleFirestoreError(e, OperationType.CREATE, COLLECTION_NAME);
     }
   },
 
   updateCase: async (updatedCase: Case): Promise<boolean> => {
     try {
-      const db = await getDB();
-      await db.put(STORE_NAME, updatedCase);
+      const { id, ...data } = updatedCase;
+      const caseDoc = doc(db, COLLECTION_NAME, id);
+      await updateDoc(caseDoc, {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
       return true;
     } catch (e) {
-      console.error("Local update failed", e);
-      return false;
-    }
-  },
-
-  importCases: async (cases: Case[]): Promise<boolean> => {
-    try {
-      const db = await getDB();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      for (const c of cases) {
-        await tx.store.put(c);
-      }
-      await tx.done;
-      return true;
-    } catch (e) {
-      console.error("Import failed", e);
+      handleFirestoreError(e, OperationType.UPDATE, `${COLLECTION_NAME}/${updatedCase.id}`);
       return false;
     }
   },
 
   deleteCase: async (id: string): Promise<void> => {
     try {
-      const db = await getDB();
-      await db.delete(STORE_NAME, id);
+      await deleteDoc(doc(db, COLLECTION_NAME, id));
     } catch (e) {
-      console.error("Local delete failed", e);
+      handleFirestoreError(e, OperationType.DELETE, `${COLLECTION_NAME}/${id}`);
     }
-  },
-  syncAllToSupabase: async (): Promise<{ success: boolean, count?: number, error?: any }> => {
-    return { success: false, error: { message: "Cloud sync not configured" } };
   }
 };
-
-
