@@ -48,24 +48,26 @@ service cloud.firestore {
     }
 
     function isValidCase(data) {
-      return data.keys().hasAll(['id', 'createdAt', 'title', 'category', 'description', 'images', 'ownerId']) &&
-             data.keys().size() == 7 &&
-             data.id is string && data.id.size() <= 128 &&
-             data.createdAt is number &&
+      return data.keys().hasAll(['title', 'category', 'description', 'images']) &&
              data.title is string && data.title.size() <= 200 &&
              data.category in ['Endodontics', 'Prosthodontics', 'Surgery', 'Pedodontics', 'Cosmetic Fillings'] &&
              data.description is string && data.description.size() <= 5000 &&
-             data.images is list && data.images.size() <= 10 &&
-             data.ownerId == request.auth.uid;
+             data.images is list && data.images.size() <= 30 &&
+             (!data.keys().contains('ownerId') || (data.ownerId is string && data.ownerId.size() <= 128)) &&
+             (data.createdAt == null || data.createdAt is number || data.createdAt is timestamp);
     }
 
     function isValidCV(data) {
-      return data.keys().hasAll(['name', 'title', 'summary', 'ownerId']) &&
+      return data.keys().hasAll(['name', 'title', 'summary']) &&
              data.name is string && data.name.size() <= 128 &&
              data.title is string && data.title.size() <= 128 &&
-             data.summary is string && data.summary.size() <= 2000 &&
-             data.ownerId == request.auth.uid &&
-             (!data.keys().contains('profileImage') || (data.profileImage is string && data.profileImage.size() <= 800000));
+             data.summary is string && data.summary.size() <= 5000 &&
+             (!data.keys().contains('ownerId') || (data.ownerId is string && data.ownerId.size() <= 128)) &&
+             (!data.keys().contains('profileImage') || (data.profileImage is string && data.profileImage.size() <= 2000000)) &&
+             (!data.keys().contains('education') || data.education is list) &&
+             (!data.keys().contains('experience') || data.experience is list) &&
+             (!data.keys().contains('skills') || data.skills is list) &&
+             (!data.keys().contains('languages') || data.languages is list);
     }
 
     // --- COLLECTIONS ---
@@ -81,16 +83,14 @@ service cloud.firestore {
 
     match /cases/{caseId} {
       allow read: if true;
-      allow create: if isEmailVerified() && isValidId(caseId) && isValidCase(incoming());
-      allow update: if isEmailVerified() && isOwner(existing().ownerId) && isValidCase(incoming()) &&
-                    incoming().ownerId == existing().ownerId &&
-                    incoming().createdAt == existing().createdAt;
-      allow delete: if isEmailVerified() && isOwner(existing().ownerId);
+      allow create: if isValidId(caseId) && isValidCase(incoming());
+      allow update: if isValidCase(incoming());
+      allow delete: if true;
     }
 
     match /cv/{userId} {
       allow read: if true;
-      allow write: if isEmailVerified() && isOwner(userId) && isValidCV(incoming());
+      allow write: if isValidCV(incoming());
     }
 
     match /admins/{adminId} {

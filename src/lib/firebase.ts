@@ -14,9 +14,7 @@ async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration.");
-    }
+    // Quota limits or offline should not break the application
   }
 }
 
@@ -48,9 +46,23 @@ export interface FirestoreErrorInfo {
   }
 }
 
+export function isQuotaOrOfflineError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.includes('Quota limit exceeded') ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('quota') ||
+    msg.includes('the client is offline') ||
+    msg.includes('unavailable')
+  );
+}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+  const errMessage = error instanceof Error ? error.message : String(error);
+  const isQuota = isQuotaOrOfflineError(error);
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMessage,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -64,7 +76,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     },
     operationType,
     path
+  };
+
+  if (!isQuota) {
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+  } else {
+    console.warn('Firestore offline/quota notice:', operationType, path);
   }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+
   throw new Error(JSON.stringify(errInfo));
 }

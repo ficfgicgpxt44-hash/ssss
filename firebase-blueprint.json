@@ -25,7 +25,7 @@
         "images": { "type": "array", "items": { "type": "string" } },
         "ownerId": { "type": "string" }
       },
-      "required": ["id", "createdAt", "title", "category", "description", "images", "ownerId"]
+      "required": ["title", "category", "description", "images"]
     },
     "CVData": {
       "title": "CVData",
@@ -63,7 +63,7 @@
         "profileImage": { "type": "string", "description": "Base64 encoded profile image" },
         "ownerId": { "type": "string" }
       },
-      "required": ["name", "title", "summary", "ownerId"]
+      "required": ["name", "title", "summary"]
     }
   },
   "firestore": {

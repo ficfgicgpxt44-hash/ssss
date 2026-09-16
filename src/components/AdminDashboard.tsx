@@ -1,22 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit3, X, Save, LayoutDashboard, LogOut, ChevronRight, Download, User as UserIcon } from 'lucide-react';
-import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { auth } from '../lib/firebase';
-import { useAuth } from './FirebaseProvider';
+import { 
+  Plus, 
+  Trash2, 
+  Edit3, 
+  X, 
+  Save, 
+  LayoutDashboard, 
+  LogOut, 
+  ChevronRight, 
+  Download, 
+  User as UserIcon,
+  Lock,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  KeyRound
+} from 'lucide-react';
 import heic2any from 'heic2any';
 import { Case, CVData } from '../types';
 import { CaseService } from '../services/CaseService';
 import { ProfileService } from '../services/ProfileService';
 
 const categories = ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "Cosmetic Fillings"];
-const ADMIN_EMAIL = "ficfgicgpxt44@gmail.com";
+const ADMIN_PASSWORD = "Sami082#";
+const DOCTOR_DOC_ID = "7MI8gihA7CO7319M2S9MDpWfVHh1";
 
 type AdminTab = 'cases' | 'profile';
 
 export default function AdminDashboard({ onClose }: { onClose: () => void }) {
-  const { user } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    return sessionStorage.getItem('sami_admin_auth') === 'true';
+  });
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [activeTab, setActiveTab] = useState<AdminTab>('cases');
   
   const [cases, setCases] = useState<Case[]>([]);
@@ -39,92 +57,125 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     languages: []
   });
 
-  useEffect(() => {
-    if (user && user.email === ADMIN_EMAIL) {
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordInput.trim() === ADMIN_PASSWORD) {
       setIsAdmin(true);
+      sessionStorage.setItem('sami_admin_auth', 'true');
+      setErrorMsg('');
     } else {
-      setIsAdmin(false);
-    }
-  }, [user]);
-
-  const handleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Login failed:", error);
-      alert("Login failed. Please check your connection.");
+      setErrorMsg('كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى / Invalid password');
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      onClose();
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
+  const handleLogout = () => {
+    setIsAdmin(false);
+    sessionStorage.removeItem('sami_admin_auth');
+    setPasswordInput('');
+    setErrorMsg('');
+    onClose();
   };
 
   useEffect(() => {
     if (isAdmin) {
       const fetchData = async () => {
-        if (activeTab === 'cases') {
-          const data = await CaseService.getCases();
-          setCases(data);
-        } else if (activeTab === 'profile' && user) {
-          const data = await ProfileService.getProfile(user.uid);
-          if (data) setCvData(data);
+        try {
+          if (activeTab === 'cases') {
+            const data = await CaseService.getCases();
+            setCases(data);
+          } else if (activeTab === 'profile') {
+            const data = await ProfileService.getProfile(DOCTOR_DOC_ID);
+            if (data) setCvData(data);
+          }
+        } catch (err) {
+          console.warn("Dashboard data fetch:", err);
         }
       };
       fetchData();
     }
-  }, [isAdmin, activeTab, user]);
+  }, [isAdmin, activeTab]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
     try {
-      await ProfileService.updateProfile(user.uid, cvData);
-      alert('Profile updated successfully');
+      await ProfileService.updateProfile(DOCTOR_DOC_ID, cvData);
+      alert('تم حفظ وتحديث السيرة الذاتية بنجاح / Profile updated successfully');
     } catch (err) {
       console.error(err);
-      alert('Failed to update profile');
+      alert('فشل في حفظ البيانات / Failed to update profile');
     }
   };
 
-  if (!user || user.email !== ADMIN_EMAIL) {
+  if (!isAdmin) {
     return (
-      <div className="fixed inset-0 z-[300] bg-dark/95 backdrop-blur-xl flex items-center justify-center p-6" dir="ltr">
+      <div className="fixed inset-0 z-[300] bg-dark/95 backdrop-blur-xl flex items-center justify-center p-4 sm:p-6" dir="rtl">
         <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-surface border border-white/10 p-12 rounded-[2.5rem] w-full max-w-md text-center shadow-2xl"
+          initial={{ opacity: 0, scale: 0.95, y: 15 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="bg-surface border border-white/10 p-8 sm:p-12 rounded-[2.5rem] w-full max-w-md text-center shadow-2xl relative overflow-hidden"
         >
-          <div className="w-20 h-20 bg-gold/10 rounded-3xl flex items-center justify-center text-gold mx-auto mb-8">
-            <LayoutDashboard className="w-10 h-10" />
+          {/* Subtle gold glow behind card */}
+          <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-48 h-48 bg-gold/15 blur-[70px] pointer-events-none rounded-full" />
+
+          <div className="w-20 h-20 bg-gold/10 border border-gold/20 rounded-3xl flex items-center justify-center text-gold mx-auto mb-6 shadow-xl shadow-gold/10">
+            <Lock className="w-9 h-9" />
           </div>
-          <h2 className="text-3xl font-serif text-white mb-2">Private Area</h2>
-          <p className="text-white/40 mb-8 font-light">Please sign in with your authorized Google account to access dashboard</p>
-          
-          <div className="space-y-4">
-            <button 
-              onClick={handleLogin}
-              className="w-full bg-gold text-dark py-5 rounded-2xl font-bold text-lg hover:opacity-90 transition-all shadow-xl shadow-gold/20 flex items-center justify-center gap-3"
-            >
-              Sign in with Google
-            </button>
-            {user && user.email !== ADMIN_EMAIL && (
-              <p className="text-red-500 text-xs">Account {user.email} is not authorized.</p>
+
+          <h2 className="text-2xl sm:text-3xl font-serif text-white mb-2">لوحة التحكم</h2>
+          <p className="text-white/40 text-xs sm:text-sm mb-8 font-light">
+            يرجى إدخال كلمة المرور للوصول إلى لوحة إدارة الحالات والسيرة الذاتية
+          </p>
+
+          <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <div className="relative">
+              <input 
+                type={showPassword ? 'text' : 'password'}
+                value={passwordInput}
+                onChange={(e) => {
+                  setPasswordInput(e.target.value);
+                  if (errorMsg) setErrorMsg('');
+                }}
+                placeholder="أدخل كلمة المرور..."
+                autoFocus
+                className="w-full bg-dark/80 border border-white/10 rounded-2xl py-4 pr-4 pl-12 text-white placeholder-white/25 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold text-right transition-all font-mono text-base tracking-wider"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+
+            {errorMsg && (
+              <motion.div 
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 p-3.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-xs text-right"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{errorMsg}</span>
+              </motion.div>
             )}
+
+            <button 
+              type="submit"
+              className="w-full bg-gold text-dark py-4 rounded-2xl font-bold text-base hover:opacity-95 transition-all shadow-xl shadow-gold/20 flex items-center justify-center gap-2.5 mt-2 cursor-pointer"
+            >
+              <KeyRound className="w-5 h-5" />
+              <span>دخول إلى لوحة التحكم</span>
+            </button>
+
             <button 
               type="button"
               onClick={onClose}
-              className="w-full py-4 text-white/30 hover:text-white transition-all font-bold"
+              className="w-full py-3 text-white/40 hover:text-white transition-all text-xs font-semibold cursor-pointer"
             >
-              Back to Portfolio
+              العودة إلى الموقع
             </button>
-          </div>
+          </form>
         </motion.div>
       </div>
     );

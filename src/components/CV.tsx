@@ -1,9 +1,9 @@
 import { motion } from 'motion/react';
 import { GraduationCap, Briefcase, CheckCircle2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { query, collection, getDocs, limit } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { ProfileService } from '../services/ProfileService';
 import { CVData } from '../types';
+import { defaultCVData } from '../data/initialData';
 
 const defaultEducation = [
 // ...
@@ -68,18 +68,17 @@ const defaultCourses = [
 ];
 
 export default function CV() {
-  const [data, setData] = useState<CVData | null>(null);
+  const [data, setData] = useState<CVData | null>(defaultCVData);
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const q = query(collection(db, 'cv'), limit(1));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          setData(querySnapshot.docs[0].data() as CVData);
+        const profile = await ProfileService.getProfile();
+        if (profile) {
+          setData(profile);
         }
-      } catch (err) {
-        console.error("Failed to fetch profile:", err);
+      } catch {
+        // Fallback handled in ProfileService
       }
     };
     fetchProfile();

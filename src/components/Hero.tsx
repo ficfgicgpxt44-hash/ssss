@@ -1,32 +1,22 @@
 import { motion } from 'motion/react';
 import { Award, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { query, collection, getDocs, limit } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { ProfileService } from '../services/ProfileService';
 import { CVData } from '../types';
+import { defaultCVData } from '../data/initialData';
 
 export default function Hero() {
-  const [cvData, setCvData] = useState<CVData>({
-    name: 'Sami Ali',
-    title: 'General Dentist',
-    summary: 'A motivated 2024 Dentistry graduate with a strong work ethic and an innate ability to learn new techniques quickly. I bring a unique, patient-centered approach to every procedure, combining precision with compassionate care. As a dedicated and adaptable team player, I’m eager to apply my skills and innovative mindset to help improve patient outcomes and contribute positively to a dental practice.',
-    education: [],
-    experience: [],
-    skills: [],
-    languages: []
-  });
+  const [cvData, setCvData] = useState<CVData>(defaultCVData);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const q = query(collection(db, 'cv'), limit(1));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          const data = querySnapshot.docs[0].data() as CVData;
-          setCvData(prev => ({...prev, ...data}));
+        const data = await ProfileService.getProfile();
+        if (data) {
+          setCvData(prev => ({ ...prev, ...data }));
         }
-      } catch (err) {
-        console.error("Failed to fetch hero data:", err);
+      } catch {
+        // Fallback handled in ProfileService
       }
     };
     fetchData();

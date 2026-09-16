@@ -13,8 +13,12 @@ export default function Gallery({ onAdminOpen, refreshTrigger }: { onAdminOpen: 
 
   useEffect(() => {
     const fetchCases = async () => {
-      const data = await CaseService.getCases();
-      setCases(data);
+      try {
+        const data = await CaseService.getCases();
+        setCases(data);
+      } catch (err) {
+        console.warn("Could not load cases:", err);
+      }
     };
     fetchCases();
   }, [refreshTrigger]);
