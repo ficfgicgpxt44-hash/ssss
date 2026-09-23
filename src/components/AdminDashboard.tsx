@@ -15,10 +15,18 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  KeyRound
+  KeyRound,
+  Briefcase,
+  GraduationCap,
+  Award,
+  Sparkles,
+  ArrowUp,
+  ArrowDown,
+  CheckCircle2,
+  Check
 } from 'lucide-react';
 import heic2any from 'heic2any';
-import { Case, CVData } from '../types';
+import { Case, CVData, EducationItem, ExperienceItem, CourseItem } from '../types';
 import { CaseService } from '../services/CaseService';
 import { ProfileService } from '../services/ProfileService';
 
@@ -26,7 +34,8 @@ const categories = ["Endodontics", "Prosthodontics", "Surgery", "Pedodontics", "
 const ADMIN_PASSWORD = "Sami082#";
 const DOCTOR_DOC_ID = "7MI8gihA7CO7319M2S9MDpWfVHh1";
 
-type AdminTab = 'cases' | 'profile';
+type AdminTab = 'cases' | 'journey' | 'profile';
+type JourneySection = 'experience' | 'education' | 'courses' | 'skills';
 
 // Normalizes input to handle Arabic numerals and trims whitespace
 const cleanPasswordInput = (val: string): string => {
@@ -46,6 +55,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [activeTab, setActiveTab] = useState<AdminTab>('cases');
+  const [journeySection, setJourneySection] = useState<JourneySection>('experience');
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   
   const [cases, setCases] = useState<Case[]>([]);
   const [isAdding, setIsAdding] = useState(false);
@@ -64,8 +75,49 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     education: [],
     experience: [],
     skills: [],
-    languages: []
+    languages: [],
+    courses: []
   });
+
+  // Journey editing modals state
+  const [editingExp, setEditingExp] = useState<{
+    isOpen: boolean;
+    index: number | null;
+    data: ExperienceItem;
+  }>({
+    isOpen: false,
+    index: null,
+    data: { role: '', clinic: '', period: '', description: '' }
+  });
+
+  const [editingEdu, setEditingEdu] = useState<{
+    isOpen: boolean;
+    index: number | null;
+    data: EducationItem;
+  }>({
+    isOpen: false,
+    index: null,
+    data: { degree: '', institution: '', year: '' }
+  });
+
+  const [editingCourse, setEditingCourse] = useState<{
+    isOpen: boolean;
+    index: number | null;
+    data: CourseItem;
+  }>({
+    isOpen: false,
+    index: null,
+    data: { name: '', details: '' }
+  });
+
+  const [newSkillInput, setNewSkillInput] = useState('');
+
+  const triggerSaveNotice = (message: string) => {
+    setSaveNotice(message);
+    setTimeout(() => {
+      setSaveNotice(null);
+    }, 3500);
+  };
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,12 +145,13 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     if (isAdmin) {
       const fetchData = async () => {
         try {
-          if (activeTab === 'cases') {
-            const data = await CaseService.getCases();
-            setCases(data);
-          } else if (activeTab === 'profile') {
-            const data = await ProfileService.getProfile(DOCTOR_DOC_ID);
-            if (data) setCvData(data);
+          const [casesData, profileData] = await Promise.all([
+            CaseService.getCases(),
+            ProfileService.getProfile(DOCTOR_DOC_ID)
+          ]);
+          setCases(casesData);
+          if (profileData) {
+            setCvData(profileData);
           }
         } catch (err) {
           console.warn("Dashboard data fetch:", err);
@@ -106,17 +159,164 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       };
       fetchData();
     }
-  }, [isAdmin, activeTab]);
+  }, [isAdmin]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await ProfileService.updateProfile(DOCTOR_DOC_ID, cvData);
-      alert('تم حفظ وتحديث السيرة الذاتية بنجاح / Profile updated successfully');
+      triggerSaveNotice('تم حفظ وتحديث السيرة الذاتية بنجاح / Profile updated');
     } catch (err) {
       console.error(err);
       alert('فشل في حفظ البيانات / Failed to update profile');
     }
+  };
+
+  const handleSaveAllJourney = async () => {
+    try {
+      await ProfileService.updateProfile(DOCTOR_DOC_ID, cvData);
+      triggerSaveNotice('تم حفظ كامل المسيرة المهنية وتحديث الموقع بنجاح!');
+    } catch (err) {
+      console.error(err);
+      alert('فشل في حفظ البيانات / Failed to save');
+    }
+  };
+
+  // Experience handlers
+  const handleSaveExperience = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExp.data.role.trim() || !editingExp.data.clinic.trim()) {
+      alert('يرجى كتابة المسمى الوظيفي والعيادة / Please provide role and clinic');
+      return;
+    }
+    const currentList = [...(cvData.experience || [])];
+    if (editingExp.index === null || editingExp.index === -1) {
+      currentList.unshift(editingExp.data);
+    } else {
+      currentList[editingExp.index] = editingExp.data;
+    }
+    const updated = { ...cvData, experience: currentList };
+    setCvData(updated);
+    ProfileService.updateProfile(DOCTOR_DOC_ID, updated);
+    setEditingExp({ isOpen: false, index: null, data: { role: '', clinic: '', period: '', description: '' } });
+    triggerSaveNotice('تم حفظ الخبرة السريرية بنجاح');
+  };
+
+  const handleDeleteExperience = (index: number) => {
+    if (!confirm('هل تريد بالتأكيد حذف هذه الخبرة؟ / Delete this clinical experience?')) return;
+    const currentList = (cvData.experience || []).filter((_, i) => i !== index);
+    const updated = { ...cvData, experience: currentList };
+    setCvData(updated);
+    ProfileService.updateProfile(DOCTOR_DOC_ID, updated);
+    triggerSaveNotice('تم حذف الخبرة');
+  };
+
+  const handleMoveExperience = (index: number, direction: 'up' | 'down') => {
+    const list = [...(cvData.experience || [])];
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= list.length) return;
+    const temp = list[index];
+    list[index] = list[target];
+    list[target] = temp;
+    const updated = { ...cvData, experience: list };
+    setCvData(updated);
+    ProfileService.updateProfile(DOCTOR_DOC_ID, updated);
+  };
+
+  // Education handlers
+  const handleSaveEducation = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEdu.data.degree.trim() || !editingEdu.data.institution.trim()) {
+      alert('يرجى ملء المؤهل والجامعة / Please provide degree and institution');
+      return;
+    }
+    const currentList = [...(cvData.education || [])];
+    if (editingEdu.index === null || editingEdu.index === -1) {
+      currentList.unshift(editingEdu.data);
+    } else {
+      currentList[editingEdu.index] = editingEdu.data;
+    }
+    const updated = { ...cvData, education: currentList };
+    setCvData(updated);
+    ProfileService.updateProfile(DOCTOR_DOC_ID, updated);
+    setEditingEdu({ isOpen: false, index: null, data: { degree: '', institution: '', year: '' } });
+    triggerSaveNotice('تم حفظ المؤهل الدراسي بنجاح');
+  };
+
+  const handleDeleteEducation = (index: number) => {
+    if (!confirm('هل تريد بالتأكيد حذف هذا المؤهل؟ / Delete this education record?')) return;
+    const currentList = (cvData.education || []).filter((_, i) => i !== index);
+    const updated = { ...cvData, education: currentList };
+    setCvData(updated);
+    ProfileService.updateProfile(DOCTOR_DOC_ID, updated);
+    triggerSaveNotice('تم حذف المؤهل الدراسي');
+  };
+
+  const handleMoveEducation = (index: number, direction: 'up' | 'down') => {
+    const list = [...(cvData.education || [])];
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= list.length) return;
+    const temp = list[index];
+    list[index] = list[target];
+    list[target] = temp;
+    const updated = { ...cvData, education: list };
+    setCvData(updated);
+    ProfileService.updateProfile(DOCTOR_DOC_ID, updated);
+  };
+
+  // Course handlers
+  const handleSaveCourse = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCourse.data.name.trim()) {
+      alert('يرجى إدخال اسم الشهادة أو الكورس / Please provide certification name');
+      return;
+    }
+    const currentList = [...(cvData.courses || [])];
+    if (editingCourse.index === null || editingCourse.index === -1) {
+      currentList.push(editingCourse.data);
+    } else {
+      currentList[editingCourse.index] = editingCourse.data;
+    }
+    const updated = { ...cvData, courses: currentList };
+    setCvData(updated);
+    ProfileService.updateProfile(DOCTOR_DOC_ID, updated);
+    setEditingCourse({ isOpen: false, index: null, data: { name: '', details: '' } });
+    triggerSaveNotice('تم حفظ الشهادة بنجاح');
+  };
+
+  const handleDeleteCourse = (index: number) => {
+    if (!confirm('هل تريد بالتأكيد حذف هذه الشهادة؟ / Delete this certification?')) return;
+    const currentList = (cvData.courses || []).filter((_, i) => i !== index);
+    const updated = { ...cvData, courses: currentList };
+    setCvData(updated);
+    ProfileService.updateProfile(DOCTOR_DOC_ID, updated);
+    triggerSaveNotice('تم حذف الشهادة');
+  };
+
+  // Skill handlers
+  const handleAddSkill = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanSkill = newSkillInput.trim();
+    if (!cleanSkill) return;
+    const currentSkills = cvData.skills || [];
+    if (currentSkills.includes(cleanSkill)) {
+      setNewSkillInput('');
+      return;
+    }
+    const updatedSkills = [...currentSkills, cleanSkill];
+    const updated = { ...cvData, skills: updatedSkills };
+    setCvData(updated);
+    ProfileService.updateProfile(DOCTOR_DOC_ID, updated);
+    setNewSkillInput('');
+    triggerSaveNotice('تمت إضافة المهارة');
+  };
+
+  const handleDeleteSkill = (index: number) => {
+    const currentSkills = (cvData.skills || []).filter((_, i) => i !== index);
+    const updated = { ...cvData, skills: currentSkills };
+    setCvData(updated);
+    ProfileService.updateProfile(DOCTOR_DOC_ID, updated);
+    triggerSaveNotice('تم حذف المهارة');
   };
 
   if (!isAdmin) {
@@ -285,8 +485,23 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[200] bg-dark flex" dir="ltr">
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {saveNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-8 right-8 z-[500] flex items-center gap-3 bg-gold text-dark px-6 py-4 rounded-2xl shadow-2xl font-bold text-sm border border-gold/40"
+          >
+            <CheckCircle2 className="w-5 h-5 text-dark shrink-0" />
+            <span>{saveNotice}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
-      <aside className="w-64 bg-surface border-r border-white/5 p-8 flex flex-col justify-between">
+      <aside className="w-64 bg-surface border-r border-white/5 p-8 flex flex-col justify-between shrink-0">
         <div>
           <div className="flex items-center gap-3 mb-12">
             <div className="w-10 h-10 bg-gold rounded-xl flex items-center justify-center text-dark">
@@ -304,11 +519,18 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
               Cases
             </button>
             <button 
+              onClick={() => setActiveTab('journey')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'journey' ? 'bg-gold text-dark' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+            >
+              <Briefcase className="w-5 h-5" />
+              Professional Journey
+            </button>
+            <button 
               onClick={() => setActiveTab('profile')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'profile' ? 'bg-gold text-dark' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
             >
               <UserIcon className="w-5 h-5" />
-              CV Profile
+              CV Profile & Bio
             </button>
             
             <div className="pt-4 pb-2">
@@ -343,7 +565,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-grow p-12 overflow-y-auto">
+      <main className="flex-grow p-8 sm:p-12 overflow-y-auto">
         {activeTab === 'cases' ? (
           <>
             <header className="flex justify-between items-center mb-12">
@@ -406,6 +628,389 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
               </AnimatePresence>
             </div>
           </>
+        ) : activeTab === 'journey' ? (
+          <div className="max-w-5xl">
+            {/* Header */}
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 pb-6 border-b border-white/5">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-serif text-white flex items-center gap-3">
+                  <Briefcase className="w-8 h-8 text-gold" />
+                  <span>Professional Journey</span>
+                </h1>
+                <p className="text-white/30 text-xs sm:text-sm mt-1">
+                  تعديل وإدارة تفاصيل الخبرات السريرية، التعليم الأكاديمي، البرامج التدريبية والمهارات
+                </p>
+              </div>
+
+              <button
+                onClick={handleSaveAllJourney}
+                className="px-6 py-3 bg-gold text-dark rounded-xl font-bold hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-gold/10 text-sm cursor-pointer"
+              >
+                <Save className="w-5 h-5" />
+                <span>حفظ التعديلات في الموقع</span>
+              </button>
+            </header>
+
+            {/* Sub-Tabs */}
+            <div className="flex flex-wrap gap-2 mb-8 bg-surface p-1.5 rounded-2xl border border-white/5">
+              <button
+                onClick={() => setJourneySection('experience')}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+                  journeySection === 'experience'
+                    ? 'bg-gold text-dark shadow-md'
+                    : 'text-white/40 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Briefcase className="w-4 h-4" />
+                <span>Clinical Experience</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  journeySection === 'experience' ? 'bg-dark/20 text-dark' : 'bg-white/10 text-white/50'
+                }`}>
+                  {cvData.experience?.length || 0}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setJourneySection('education')}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+                  journeySection === 'education'
+                    ? 'bg-gold text-dark shadow-md'
+                    : 'text-white/40 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <GraduationCap className="w-4 h-4" />
+                <span>Education</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  journeySection === 'education' ? 'bg-dark/20 text-dark' : 'bg-white/10 text-white/50'
+                }`}>
+                  {cvData.education?.length || 0}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setJourneySection('courses')}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+                  journeySection === 'courses'
+                    ? 'bg-gold text-dark shadow-md'
+                    : 'text-white/40 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Award className="w-4 h-4" />
+                <span>Certifications</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  journeySection === 'courses' ? 'bg-dark/20 text-dark' : 'bg-white/10 text-white/50'
+                }`}>
+                  {cvData.courses?.length || 0}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setJourneySection('skills')}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+                  journeySection === 'skills'
+                    ? 'bg-gold text-dark shadow-md'
+                    : 'text-white/40 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Clinical Skills</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  journeySection === 'skills' ? 'bg-dark/20 text-dark' : 'bg-white/10 text-white/50'
+                }`}>
+                  {cvData.skills?.length || 0}
+                </span>
+              </button>
+            </div>
+
+            {/* SECTION 1: CLINICAL EXPERIENCE */}
+            {journeySection === 'experience' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Clinical Experience (الخبرات السريرية)</h2>
+                    <p className="text-white/30 text-xs">الأدوار والعيادات والمستشفيات وفترة العمل</p>
+                  </div>
+                  <button
+                    onClick={() => setEditingExp({
+                      isOpen: true,
+                      index: -1,
+                      data: { role: '', clinic: '', period: '', description: '' }
+                    })}
+                    className="px-5 py-2.5 bg-gold text-dark rounded-xl font-bold text-xs sm:text-sm hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-gold/10 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة خبرة جديدة / Add Experience</span>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {(cvData.experience || []).map((exp, idx) => (
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-card border border-white/5 p-6 rounded-3xl flex flex-col sm:flex-row justify-between sm:items-center gap-4 hover:border-gold/20 transition-all"
+                    >
+                      <div className="space-y-1 max-w-2xl">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="text-gold font-bold text-lg">{exp.role}</span>
+                          <span className="text-white/40 text-sm font-medium">@ {exp.clinic}</span>
+                          <span className="text-[10px] font-black text-gold bg-gold/10 px-3 py-1 rounded-full border border-gold/20 uppercase tracking-wider">
+                            {exp.period}
+                          </span>
+                        </div>
+                        <p className="text-white/40 text-xs sm:text-sm font-light leading-relaxed">
+                          {exp.description}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          title="نقل لأعلى / Move Up"
+                          disabled={idx === 0}
+                          onClick={() => handleMoveExperience(idx, 'up')}
+                          className="p-2.5 bg-white/5 hover:bg-white/10 disabled:opacity-20 disabled:hover:bg-white/5 rounded-xl transition-all text-white border border-white/5 cursor-pointer"
+                        >
+                          <ArrowUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="نقل لأسفل / Move Down"
+                          disabled={idx === (cvData.experience?.length || 0) - 1}
+                          onClick={() => handleMoveExperience(idx, 'down')}
+                          className="p-2.5 bg-white/5 hover:bg-white/10 disabled:opacity-20 disabled:hover:bg-white/5 rounded-xl transition-all text-white border border-white/5 cursor-pointer"
+                        >
+                          <ArrowDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="تعديل / Edit"
+                          onClick={() => setEditingExp({ isOpen: true, index: idx, data: { ...exp } })}
+                          className="p-2.5 bg-white/5 hover:bg-gold hover:text-dark rounded-xl transition-all text-white border border-white/10 cursor-pointer"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="حذف / Delete"
+                          onClick={() => handleDeleteExperience(idx)}
+                          className="p-2.5 bg-white/5 hover:bg-red-500 hover:text-white rounded-xl transition-all text-white border border-white/10 cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+
+                  {(!cvData.experience || cvData.experience.length === 0) && (
+                    <div className="text-center py-16 bg-card/40 rounded-3xl border border-dashed border-white/10">
+                      <Briefcase className="w-12 h-12 text-white/10 mx-auto mb-3" />
+                      <p className="text-white/30 text-sm">لم تتم إضافة أي خبرات سريرية بعد</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 2: EDUCATION */}
+            {journeySection === 'education' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Academic Education (التعليم الأكاديمي)</h2>
+                    <p className="text-white/30 text-xs">الشهادات الجامعية والدرجات العلمية</p>
+                  </div>
+                  <button
+                    onClick={() => setEditingEdu({
+                      isOpen: true,
+                      index: -1,
+                      data: { degree: '', institution: '', year: '' }
+                    })}
+                    className="px-5 py-2.5 bg-gold text-dark rounded-xl font-bold text-xs sm:text-sm hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-gold/10 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة مؤهل دراسي / Add Education</span>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {(cvData.education || []).map((edu, idx) => (
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-card border border-white/5 p-6 rounded-3xl flex flex-col sm:flex-row justify-between sm:items-center gap-4 hover:border-gold/20 transition-all"
+                    >
+                      <div className="space-y-1">
+                        <div className="text-gold text-[10px] font-black uppercase tracking-widest">{edu.year}</div>
+                        <h3 className="text-white font-bold text-lg">{edu.degree}</h3>
+                        <p className="text-white/40 text-sm font-medium">{edu.institution}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          title="نقل لأعلى"
+                          disabled={idx === 0}
+                          onClick={() => handleMoveEducation(idx, 'up')}
+                          className="p-2.5 bg-white/5 hover:bg-white/10 disabled:opacity-20 disabled:hover:bg-white/5 rounded-xl transition-all text-white border border-white/5 cursor-pointer"
+                        >
+                          <ArrowUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="نقل لأسفل"
+                          disabled={idx === (cvData.education?.length || 0) - 1}
+                          onClick={() => handleMoveEducation(idx, 'down')}
+                          className="p-2.5 bg-white/5 hover:bg-white/10 disabled:opacity-20 disabled:hover:bg-white/5 rounded-xl transition-all text-white border border-white/5 cursor-pointer"
+                        >
+                          <ArrowDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="تعديل"
+                          onClick={() => setEditingEdu({ isOpen: true, index: idx, data: { ...edu } })}
+                          className="p-2.5 bg-white/5 hover:bg-gold hover:text-dark rounded-xl transition-all text-white border border-white/10 cursor-pointer"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="حذف"
+                          onClick={() => handleDeleteEducation(idx)}
+                          className="p-2.5 bg-white/5 hover:bg-red-500 hover:text-white rounded-xl transition-all text-white border border-white/10 cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+
+                  {(!cvData.education || cvData.education.length === 0) && (
+                    <div className="text-center py-16 bg-card/40 rounded-3xl border border-dashed border-white/10">
+                      <GraduationCap className="w-12 h-12 text-white/10 mx-auto mb-3" />
+                      <p className="text-white/30 text-sm">لم تتم إضافة أي مؤهلات دراسية بعد</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 3: CERTIFICATIONS */}
+            {journeySection === 'courses' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Certifications & Programs (الشهادات والبرامج)</h2>
+                    <p className="text-white/30 text-xs">الدورات التدريبية المتقدمة وساعات الاعتماد</p>
+                  </div>
+                  <button
+                    onClick={() => setEditingCourse({
+                      isOpen: true,
+                      index: -1,
+                      data: { name: '', details: '' }
+                    })}
+                    className="px-5 py-2.5 bg-gold text-dark rounded-xl font-bold text-xs sm:text-sm hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-gold/10 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة شهادة / Add Certification</span>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {(cvData.courses || []).map((course, idx) => (
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-card border border-white/5 p-6 rounded-3xl flex justify-between items-center gap-4 hover:border-gold/20 transition-all"
+                    >
+                      <div className="space-y-1">
+                        <h3 className="text-white font-bold text-base">{course.name}</h3>
+                        <p className="text-gold text-xs font-semibold tracking-wider uppercase">{course.details}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          title="تعديل"
+                          onClick={() => setEditingCourse({ isOpen: true, index: idx, data: { ...course } })}
+                          className="p-2.5 bg-white/5 hover:bg-gold hover:text-dark rounded-xl transition-all text-white border border-white/10 cursor-pointer"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="حذف"
+                          onClick={() => handleDeleteCourse(idx)}
+                          className="p-2.5 bg-white/5 hover:bg-red-500 hover:text-white rounded-xl transition-all text-white border border-white/10 cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+
+                  {(!cvData.courses || cvData.courses.length === 0) && (
+                    <div className="text-center py-16 bg-card/40 rounded-3xl border border-dashed border-white/10">
+                      <Award className="w-12 h-12 text-white/10 mx-auto mb-3" />
+                      <p className="text-white/30 text-sm">لم تتم إضافة أي شهادات أو برامج بعد</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 4: CLINICAL SKILLS */}
+            {journeySection === 'skills' && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Clinical Expertise & Skills (المهارات السريرية والتقنية)</h2>
+                  <p className="text-white/30 text-xs">المهارات المميزة مثل Endodontics، التكبير باللوبس، التصوير، وتصميم الابتسامة</p>
+                </div>
+
+                {/* Add Skill Input */}
+                <form onSubmit={handleAddSkill} className="flex gap-3">
+                  <input
+                    type="text"
+                    value={newSkillInput}
+                    onChange={(e) => setNewSkillInput(e.target.value)}
+                    placeholder="اكتب اسم المهارة الجديدة... (e.g., Dental Photography, Rotary Endodontics)"
+                    className="flex-grow bg-card border border-white/10 rounded-2xl px-5 py-4 text-white text-sm focus:border-gold transition-all outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="px-8 py-4 bg-gold text-dark rounded-2xl font-bold text-sm hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-gold/10 cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span>إضافة المهارة</span>
+                  </button>
+                </form>
+
+                {/* Skill Badges */}
+                <div className="bg-card border border-white/5 p-8 rounded-3xl">
+                  <div className="flex flex-wrap gap-3">
+                    {(cvData.skills || []).map((skill, idx) => (
+                      <motion.div
+                        key={idx}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-dark/70 border border-white/10 hover:border-gold/30 rounded-2xl py-2.5 px-4 flex items-center gap-3 group transition-all"
+                      >
+                        <div className="w-2 h-2 rounded-full bg-gold shrink-0" />
+                        <span className="text-white font-medium text-xs sm:text-sm tracking-wide">{skill}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSkill(idx)}
+                          className="text-white/30 hover:text-red-400 p-1 rounded-lg transition-colors cursor-pointer"
+                          title="حذف المهارة"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </div>
+
+                  {(!cvData.skills || cvData.skills.length === 0) && (
+                    <div className="text-center py-12 text-white/30 text-sm">
+                      لم يتم إدخال أي مهارات بعد. أضف مهاراتك من الحقل أعلاه.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="max-w-4xl">
             <header className="mb-12">
@@ -501,7 +1106,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
               <div className="pt-6 border-t border-white/5">
                 <button 
                   type="submit"
-                  className="px-10 py-5 bg-gold text-dark rounded-2xl font-bold hover:opacity-90 transition-all flex items-center gap-3 shadow-xl shadow-gold/10"
+                  className="px-10 py-5 bg-gold text-dark rounded-2xl font-bold hover:opacity-90 transition-all flex items-center gap-3 shadow-xl shadow-gold/10 cursor-pointer"
                 >
                   <Save className="w-6 h-6" />
                   Save Profile Updates
@@ -511,6 +1116,257 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </main>
+
+      {/* Experience Add/Edit Modal */}
+      {editingExp.isOpen && (
+        <div className="fixed inset-0 z-[350] bg-dark/95 backdrop-blur-md flex items-center justify-center p-6" dir="ltr">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-surface border border-white/10 rounded-[2.5rem] w-full max-w-xl p-8 relative shadow-2xl"
+          >
+            <button
+              onClick={() => setEditingExp({ isOpen: false, index: null, data: { role: '', clinic: '', period: '', description: '' } })}
+              className="absolute top-6 right-6 text-white/40 hover:text-white cursor-pointer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <h2 className="text-2xl font-serif text-white mb-6 flex items-center gap-2">
+              <Briefcase className="w-6 h-6 text-gold" />
+              <span>{editingExp.index === -1 || editingExp.index === null ? 'Add Clinical Experience' : 'Edit Clinical Experience'}</span>
+            </h2>
+
+            <form onSubmit={handleSaveExperience} className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Role / Position (المسمى الوظيفي)</label>
+                <input
+                  required
+                  value={editingExp.data.role}
+                  onChange={(e) => setEditingExp({
+                    ...editingExp,
+                    data: { ...editingExp.data, role: e.target.value }
+                  })}
+                  placeholder="e.g. First Operator, Resident Dentist..."
+                  className="w-full bg-dark/60 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all outline-none text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Clinic / Hospital (المركز أو العيادة)</label>
+                  <input
+                    required
+                    value={editingExp.data.clinic}
+                    onChange={(e) => setEditingExp({
+                      ...editingExp,
+                      data: { ...editingExp.data, clinic: e.target.value }
+                    })}
+                    placeholder="e.g. Shenawi Dental Clinic"
+                    className="w-full bg-dark/60 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all outline-none text-sm"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Period / Duration (الفترة الزمنية)</label>
+                  <input
+                    required
+                    value={editingExp.data.period}
+                    onChange={(e) => setEditingExp({
+                      ...editingExp,
+                      data: { ...editingExp.data, period: e.target.value }
+                    })}
+                    placeholder="e.g. Present, 2024 - Present, 6 Months"
+                    className="w-full bg-dark/60 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all outline-none text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Clinical Description (تفاصيل العمل السريري)</label>
+                <textarea
+                  rows={4}
+                  value={editingExp.data.description}
+                  onChange={(e) => setEditingExp({
+                    ...editingExp,
+                    data: { ...editingExp.data, description: e.target.value }
+                  })}
+                  placeholder="Describe key responsibilities, procedures handled, patient care..."
+                  className="w-full bg-dark/60 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all outline-none text-sm resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="submit"
+                  className="flex-grow py-4 bg-gold text-dark font-bold rounded-2xl hover:opacity-95 transition-all text-sm cursor-pointer shadow-lg shadow-gold/10"
+                >
+                  حفظ الخبرة / Save Experience
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingExp({ isOpen: false, index: null, data: { role: '', clinic: '', period: '', description: '' } })}
+                  className="px-6 py-4 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white font-bold rounded-2xl transition-all text-sm cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Education Add/Edit Modal */}
+      {editingEdu.isOpen && (
+        <div className="fixed inset-0 z-[350] bg-dark/95 backdrop-blur-md flex items-center justify-center p-6" dir="ltr">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-surface border border-white/10 rounded-[2.5rem] w-full max-w-xl p-8 relative shadow-2xl"
+          >
+            <button
+              onClick={() => setEditingEdu({ isOpen: false, index: null, data: { degree: '', institution: '', year: '' } })}
+              className="absolute top-6 right-6 text-white/40 hover:text-white cursor-pointer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <h2 className="text-2xl font-serif text-white mb-6 flex items-center gap-2">
+              <GraduationCap className="w-6 h-6 text-gold" />
+              <span>{editingEdu.index === -1 || editingEdu.index === null ? 'Add Education' : 'Edit Education'}</span>
+            </h2>
+
+            <form onSubmit={handleSaveEducation} className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Degree / Qualification (المؤهل الأكاديمي)</label>
+                <input
+                  required
+                  value={editingEdu.data.degree}
+                  onChange={(e) => setEditingEdu({
+                    ...editingEdu,
+                    data: { ...editingEdu.data, degree: e.target.value }
+                  })}
+                  placeholder="e.g. Bachelor of Oral and Dental Medicine"
+                  className="w-full bg-dark/60 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all outline-none text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Institution / University (الجامعة أو الكلية)</label>
+                <input
+                  required
+                  value={editingEdu.data.institution}
+                  onChange={(e) => setEditingEdu({
+                    ...editingEdu,
+                    data: { ...editingEdu.data, institution: e.target.value }
+                  })}
+                  placeholder="e.g. Delta University"
+                  className="w-full bg-dark/60 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all outline-none text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Year / Period (سنة التخرج أو الفترة)</label>
+                <input
+                  required
+                  value={editingEdu.data.year}
+                  onChange={(e) => setEditingEdu({
+                    ...editingEdu,
+                    data: { ...editingEdu.data, year: e.target.value }
+                  })}
+                  placeholder="e.g. 2019 - 2024"
+                  className="w-full bg-dark/60 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all outline-none text-sm"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="submit"
+                  className="flex-grow py-4 bg-gold text-dark font-bold rounded-2xl hover:opacity-95 transition-all text-sm cursor-pointer shadow-lg shadow-gold/10"
+                >
+                  حفظ المؤهل / Save Education
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingEdu({ isOpen: false, index: null, data: { degree: '', institution: '', year: '' } })}
+                  className="px-6 py-4 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white font-bold rounded-2xl transition-all text-sm cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Certification Add/Edit Modal */}
+      {editingCourse.isOpen && (
+        <div className="fixed inset-0 z-[350] bg-dark/95 backdrop-blur-md flex items-center justify-center p-6" dir="ltr">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-surface border border-white/10 rounded-[2.5rem] w-full max-w-xl p-8 relative shadow-2xl"
+          >
+            <button
+              onClick={() => setEditingCourse({ isOpen: false, index: null, data: { name: '', details: '' } })}
+              className="absolute top-6 right-6 text-white/40 hover:text-white cursor-pointer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <h2 className="text-2xl font-serif text-white mb-6 flex items-center gap-2">
+              <Award className="w-6 h-6 text-gold" />
+              <span>{editingCourse.index === -1 || editingCourse.index === null ? 'Add Certification' : 'Edit Certification'}</span>
+            </h2>
+
+            <form onSubmit={handleSaveCourse} className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Certification / Program Name (اسم الشهادة أو الدورة)</label>
+                <input
+                  required
+                  value={editingCourse.data.name}
+                  onChange={(e) => setEditingCourse({
+                    ...editingCourse,
+                    data: { ...editingCourse.data, name: e.target.value }
+                  })}
+                  placeholder="e.g. Mastering Basic & Advanced Endodontics Program"
+                  className="w-full bg-dark/60 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all outline-none text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Details / Credit Hours (التفاصيل أو ساعات الاعتماد)</label>
+                <input
+                  required
+                  value={editingCourse.data.details}
+                  onChange={(e) => setEditingCourse({
+                    ...editingCourse,
+                    data: { ...editingCourse.data, details: e.target.value }
+                  })}
+                  placeholder="e.g. 60 Credit Hours / Digital Workflow"
+                  className="w-full bg-dark/60 border border-white/10 rounded-2xl p-4 text-white focus:border-gold transition-all outline-none text-sm"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="submit"
+                  className="flex-grow py-4 bg-gold text-dark font-bold rounded-2xl hover:opacity-95 transition-all text-sm cursor-pointer shadow-lg shadow-gold/10"
+                >
+                  حفظ الشهادة / Save Certification
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingCourse({ isOpen: false, index: null, data: { name: '', details: '' } })}
+                  className="px-6 py-4 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white font-bold rounded-2xl transition-all text-sm cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       {/* Editor Modal */}
       {isAdding && (

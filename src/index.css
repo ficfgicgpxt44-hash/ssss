@@ -74,3 +74,25 @@ img {
   font-family: var(--font-serif);
 }
 
+/* Explicit standard sRGB / RGBA fallbacks to avoid OKLab interpolation errors in Motion / animation engines */
+.bg-dark\/20 { background-color: rgba(6, 7, 9, 0.2) !important; }
+.bg-dark\/40 { background-color: rgba(6, 7, 9, 0.4) !important; }
+.bg-dark\/50 { background-color: rgba(6, 7, 9, 0.5) !important; }
+.bg-dark\/60 { background-color: rgba(6, 7, 9, 0.6) !important; }
+.bg-dark\/70 { background-color: rgba(6, 7, 9, 0.7) !important; }
+.bg-dark\/80 { background-color: rgba(6, 7, 9, 0.8) !important; }
+.bg-dark\/95 { background-color: rgba(6, 7, 9, 0.95) !important; }
+
+.bg-card\/40 { background-color: rgba(17, 20, 25, 0.4) !important; }
+.bg-card\/50 { background-color: rgba(17, 20, 25, 0.5) !important; }
+
+.bg-gold\/10 { background-color: rgba(197, 160, 89, 0.1) !important; }
+.bg-gold\/20 { background-color: rgba(197, 160, 89, 0.2) !important; }
+.bg-gold\/40 { background-color: rgba(197, 160, 89, 0.4) !important; }
+
+.border-gold\/10 { border-color: rgba(197, 160, 89, 0.1) !important; }
+.border-gold\/20 { border-color: rgba(197, 160, 89, 0.2) !important; }
+.border-gold\/30 { border-color: rgba(197, 160, 89, 0.3) !important; }
+.border-gold\/40 { border-color: rgba(197, 160, 89, 0.4) !important; }
+
+

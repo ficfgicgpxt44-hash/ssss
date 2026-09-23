@@ -82,12 +82,23 @@ export default function CV() {
       }
     };
     fetchProfile();
+
+    const handleUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<CVData>;
+      if (customEvent.detail) {
+        setData(customEvent.detail);
+      } else {
+        fetchProfile();
+      }
+    };
+    window.addEventListener('portfolio_profile_updated', handleUpdate);
+    return () => window.removeEventListener('portfolio_profile_updated', handleUpdate);
   }, []);
 
   const education = data?.education && data.education.length > 0 ? data.education : defaultEducation;
   const experience = data?.experience && data.experience.length > 0 ? data.experience : defaultExperience;
   const specializedSkills = data?.skills && data.skills.length > 0 ? data.skills : defaultSkills;
-  const courses = defaultCourses; 
+  const courses = data?.courses && data.courses.length > 0 ? data.courses : defaultCourses; 
 
   return (
     <section id="cv" className="py-32 bg-surface px-6 sm:px-6 lg:px-8 border-y border-white/5 relative overflow-hidden" dir="ltr">

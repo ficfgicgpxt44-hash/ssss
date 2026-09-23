@@ -20,6 +20,17 @@ export default function Hero() {
       }
     };
     fetchData();
+
+    const handleUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<CVData>;
+      if (customEvent.detail) {
+        setCvData(prev => ({ ...prev, ...customEvent.detail }));
+      } else {
+        fetchData();
+      }
+    };
+    window.addEventListener('portfolio_profile_updated', handleUpdate);
+    return () => window.removeEventListener('portfolio_profile_updated', handleUpdate);
   }, []);
 
   return (

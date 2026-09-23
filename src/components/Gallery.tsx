@@ -75,7 +75,7 @@ export default function Gallery({ onAdminOpen, refreshTrigger }: { onAdminOpen: 
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.4 }}
               key={c.id}
-              className="group relative bg-card/40 rounded-[3rem] overflow-hidden border border-white/5 p-2 cursor-pointer transition-all hover:bg-white/[0.02] hover:border-gold/20"
+              className="group relative bg-card/40 rounded-[3rem] overflow-hidden border border-white/5 p-2 cursor-pointer transition-colors duration-300 hover:bg-white/[0.02] hover:border-gold/20"
               onClick={() => setSelectedCase(c)}
             >
               <div className="aspect-[16/10] bg-dark rounded-[2.5rem] overflow-hidden relative">

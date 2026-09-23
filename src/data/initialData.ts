@@ -52,7 +52,13 @@ export const defaultCVData: CVData = {
     'Deal with CBCT',
     'Communication Skills',
   ],
-  languages: ['Arabic (Native)', 'English (Fluent)']
+  languages: ['Arabic (Native)', 'English (Fluent)'],
+  courses: [
+    { name: 'Mastering Basic & Advanced Endodontics Program', details: '60 Credit Hours' },
+    { name: 'Digital Dentistry Program (Basic & Advanced Exocad Mastering)', details: 'Digital Workflow' },
+    { name: 'Dental Aesthetics Program', details: '90 Credit Hours' },
+    { name: 'Digital Smile Design (DSD) Program & Dental Photography', details: 'Aesthetic Planning' },
+  ]
 };
 
 export const initialCases: Case[] = [

@@ -18,7 +18,15 @@ function getLocalCv(): CVData {
   try {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return {
+        ...defaultCVData,
+        ...parsed,
+        education: parsed.education && parsed.education.length > 0 ? parsed.education : defaultCVData.education,
+        experience: parsed.experience && parsed.experience.length > 0 ? parsed.experience : defaultCVData.experience,
+        skills: parsed.skills && parsed.skills.length > 0 ? parsed.skills : defaultCVData.skills,
+        courses: parsed.courses && parsed.courses.length > 0 ? parsed.courses : defaultCVData.courses,
+      };
     }
   } catch {
     // Ignore JSON/storage errors
@@ -30,6 +38,9 @@ function saveLocalCv(data: CVData): void {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
     memoryCvCache = data;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('portfolio_profile_updated', { detail: data }));
+    }
   } catch {
     // Ignore storage quota/private mode errors
   }
