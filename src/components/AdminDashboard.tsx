@@ -28,9 +28,19 @@ const DOCTOR_DOC_ID = "7MI8gihA7CO7319M2S9MDpWfVHh1";
 
 type AdminTab = 'cases' | 'profile';
 
+// Normalizes input to handle Arabic numerals and trims whitespace
+const cleanPasswordInput = (val: string): string => {
+  return val
+    .trim()
+    .replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString());
+};
+
 export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    return sessionStorage.getItem('sami_admin_auth') === 'true';
+    return (
+      localStorage.getItem('sami_admin_auth') === 'true' ||
+      sessionStorage.getItem('sami_admin_auth') === 'true'
+    );
   });
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -59,8 +69,10 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordInput.trim() === ADMIN_PASSWORD) {
+    const clean = cleanPasswordInput(passwordInput);
+    if (clean === ADMIN_PASSWORD || clean.toLowerCase() === ADMIN_PASSWORD.toLowerCase()) {
       setIsAdmin(true);
+      localStorage.setItem('sami_admin_auth', 'true');
       sessionStorage.setItem('sami_admin_auth', 'true');
       setErrorMsg('');
     } else {
@@ -70,6 +82,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const handleLogout = () => {
     setIsAdmin(false);
+    localStorage.removeItem('sami_admin_auth');
     sessionStorage.removeItem('sami_admin_auth');
     setPasswordInput('');
     setErrorMsg('');
